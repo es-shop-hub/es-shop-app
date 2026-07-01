@@ -126,7 +126,8 @@ function getFilterValues() {
     productId: $("productFilter")?.value || "",
     sellerId: $("sellerFilter")?.value || "all",
     payment: $("paymentFilter")?.value || "",
-    status: $("statusFilter")?.value || ""
+    status: $("statusFilter")?.value || "",
+    clientName: ($("clientSearch")?.value || "").trim()
   };
 }
 
@@ -442,18 +443,14 @@ function buildRows() {
     const tb = b.createdAt?.getTime() || 0;
     return tb - ta;
   });
-}
 
-function getFilteredRows() {
-  const search = ($("clientSearch")?.value || "").trim().toLowerCase();
-
-  if (!search) {
-    return state.rows;
+  const { clientName } = getFilterValues();
+  if (clientName) {
+    const term = clientName.toLowerCase();
+    state.rows = state.rows.filter(row =>
+      (row.clientName || "").toLowerCase().includes(term)
+    );
   }
-
-  return state.rows.filter(row =>
-    (row.clientName || "").toLowerCase().includes(search)
-  );
 }
 
 function renderKpis(rows) {
@@ -570,7 +567,7 @@ function createSaleCard(row) {
 }
 
 function render() {
-  const rows = getFilteredRows();
+  const rows = state.rows;
 
   renderKpis(rows);
 
@@ -636,31 +633,32 @@ function bindEvents() {
     }
 
     updateDateLimits();
-
-    if (!custom) {
-      loadData();
-    }
-  });
-
-  [
-    "productFilter",
-    "paymentFilter",
-    "statusFilter",
-    "sellerFilter"
-  ].forEach(id => {
-    const element = $(id);
-    if (!element) return;
-    element.addEventListener("change", () => {
-      loadData();
-    });
   });
 
   $("applyFiltersBtn")?.addEventListener("click", () => {
+    if ($("statsRange")?.value === "custom") {
+      const from = $("dateFrom")?.value;
+      const to = $("dateTo")?.value;
+      if (!from || !to) {
+        const list = $("salesList");
+        if (list) {
+          list.replaceChildren();
+          const msg = document.createElement("div");
+          msg.className = "empty";
+          msg.textContent = "Choisissez une date début et une date fin";
+          list.appendChild(msg);
+        }
+        return;
+      }
+    }
     loadData();
   });
 
-  $("clientSearch")?.addEventListener("input", () => {
-    render();
+  $("clientSearch")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      $("applyFiltersBtn")?.click();
+    }
   });
 
   $("resetBtn")?.addEventListener("click", resetFilters);

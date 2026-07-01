@@ -22,7 +22,6 @@ sales → offlineActionId ASC, createdAt DESC (where seul sans orderBy date)
 debts → phone ASC, createdAt DESC
 expenses → relatedTo ASC, createdAt DESC
 losses → note ASC, createdAt DESC
-sale_items → productId ASC, createdAt DESC  (pas de where Firestore aujourd’hui)
 purchases → supplier ASC, createdAt DESC    (pas de where aujourd’hui)
 
 
@@ -32,13 +31,23 @@ purchases → supplier ASC, createdAt DESC    (pas de where aujourd’hui)
 
 sales
   createdAt >= | <= + orderBy createdAt DESC     → stats.js, vendus.js
-  sellerId == + createdAt >= | <= + orderBy createdAt DESC → stats.js
+  sellerId == + createdAt >= | <= + orderBy createdAt DESC → stats.js, vendus.js
+  payment_status == + createdAt >= | <= + orderBy createdAt DESC → vendus.js
+  status == + createdAt >= | <= + orderBy createdAt DESC → vendus.js
+  sellerId + payment_status + createdAt (combinaisons vendus.js / stats.js)
+  sellerId + status + createdAt (combinaisons vendus.js)
+  payment_status + status + createdAt (combinaisons vendus.js)
+  sellerId + payment_status + status + createdAt (filtres combinés vendus.js)
+
+sale_items
+  productId == + createdAt >= | <= + orderBy createdAt DESC → vendus.js
 
 expenses | losses | purchases | stock_movements
   createdAt >= | <= + orderBy createdAt DESC     → stats.js, finance/data.js
 
-debts | losses (notifications)
+debts
   orderBy createdAt DESC (+ limit losses)        → stats.js, notifications.js
+  amount_remaining > 0 + orderBy amount_remaining DESC → stats.js (top dettes)
 
 stock_movements
   productId ==                                     → index.js, purchases.js, losses.js
@@ -76,12 +85,16 @@ offlineActionId ASC
 composites — OBLIGATOIRES (code en production)
 sellerId ASC, createdAt DESC
 
-composites — CRITIQUES (filtres vendus.js aujourd’hui client → migration Firestore probable)
+composites — CRITIQUES (filtres vendus.js — Firestore actif)
 payment_status ASC, createdAt DESC
 status ASC, createdAt DESC
-
-analytics — réel si stats + vendus unifiés serveur
 sellerId ASC, payment_status ASC, createdAt DESC
+sellerId ASC, status ASC, createdAt DESC
+payment_status ASC, status ASC, createdAt DESC
+sellerId ASC, payment_status ASC, status ASC, createdAt DESC
+
+futur — recherche client exacte sur sales (clientName ==)
+clientName ASC, createdAt DESC
 
 
 ---
@@ -89,9 +102,12 @@ sellerId ASC, payment_status ASC, createdAt DESC
 📁 sale_items
 
 simples
-(suffisant pour ranging.js limit 500 sans where)
+createdAt ASC
+createdAt DESC
+productId ASC
 
-composites — NON requis aujourd’hui
+composites — OBLIGATOIRES (vendus.js filtre produit + période)
+productId ASC, createdAt DESC
 
 futur probable si détail vente par saleId
 saleId ASC, createdAt DESC
@@ -172,6 +188,9 @@ relatedSaleId ASC
 
 composites — CRITIQUES (debts.js filtre status + tri date)
 status ASC, createdAt DESC
+
+composites — CRITIQUES (stats.js dettes ouvertes — top 10)
+amount_remaining DESC
 
 composites — CRITIQUES (suivi échéances + notifications)
 status ASC, DueDate ASC
@@ -361,10 +380,49 @@ getDoc / getDocs sans where composite → pas d’index composite à créer
         { "fieldPath": "productId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "sale_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sellerId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "payment_status", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sellerId", "order": "ASCENDING" },
+        { "fieldPath": "payment_status", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
 }
+
+Note déploiement : index mono-champ (createdAt DESC seul, amount_remaining DESC seul)
+→ gérés automatiquement par Firestore ; pas besoin dans indexes.json.
 
 
 ---
@@ -377,6 +435,13 @@ sales
   payment_status ASC, createdAt DESC
   status ASC, createdAt DESC
   sellerId ASC, payment_status ASC, createdAt DESC
+  sellerId ASC, status ASC, createdAt DESC
+  payment_status ASC, status ASC, createdAt DESC
+  sellerId ASC, payment_status ASC, status ASC, createdAt DESC
+
+sale_items
+  productId ASC, createdAt DESC
+  createdAt DESC
 
 stock_movements
   createdAt DESC
@@ -393,6 +458,7 @@ expenses
 debts
   createdAt DESC
   DueDate ASC
+  amount_remaining DESC
   status ASC, createdAt DESC
   status ASC, DueDate ASC
   category ASC, createdAt DESC
@@ -418,7 +484,12 @@ Mais après split expenses / debts / losses :
   ✅ remplacer par status / category ASC, createdAt DESC par collection
 
 Priorité déploiement :
-  1. sellerId ASC, createdAt DESC          (stats.js — bloquant si filtre vendeur)
-  2. productId ASC, createdAt ASC          (FIFO stock_movements — perf)
-  3. status ASC, DueDate ASC               (debts — échéances)
-  4. le reste                                (avant migration filtres vendus/finances côté Firestore)
+  1. sellerId ASC, createdAt DESC          (stats.js + vendus.js — bloquant filtre vendeur)
+  2. productId ASC, createdAt DESC         (sale_items vendus.js — bloquant filtre produit)
+  3. payment_status ASC, createdAt DESC    (vendus.js — filtre paiement)
+  4. status ASC, createdAt DESC            (vendus.js — filtre statut vente)
+  5. sellerId + payment_status + status + createdAt DESC (vendus.js filtres combinés)
+  6. amount_remaining DESC                 (stats.js — top dettes ouvertes)
+  7. productId ASC, createdAt ASC          (FIFO stock_movements — perf)
+  8. status ASC, DueDate ASC               (debts — échéances)
+  9. le reste                              (finances, pertes, achats période)
