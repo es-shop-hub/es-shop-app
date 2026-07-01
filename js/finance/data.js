@@ -1,6 +1,7 @@
 import {
   db,
   collection,
+  addDoc,
   getDocs,
   query,
   orderBy,
@@ -101,4 +102,52 @@ export function dateRangeFromInputs(startValue, endValue) {
   }
 
   return range;
+}
+
+/** Montant réinvestissement = (NS - AS) × prix unitaire si NS > AS */
+export function computeStockIncreaseFundingAmount(stockBefore, stockAfter, unitPrice) {
+  const before = Number(stockBefore) || 0;
+  const after = Number(stockAfter) || 0;
+  const price = Number(unitPrice) || 0;
+  const diff = after - before;
+
+  if (diff <= 0 || price <= 0) {
+    return 0;
+  }
+
+  return diff * price;
+}
+
+export async function recordStockFundingExpense({
+  category,
+  amount,
+  reason,
+  relatedTo = null,
+  relatedPurchaseId = null,
+  note = "",
+  createdBy,
+  createdAt
+}) {
+  const value = Number(amount) || 0;
+
+  if (value <= 0 || !createdBy) {
+    return;
+  }
+
+  const ts = createdAt || Timestamp.now();
+
+  await addDoc(collection(db, COLLECTIONS.expenses), {
+    reason,
+    category,
+    type: "auto",
+    amount: value,
+    relatedTo,
+    relatedPurchaseId,
+    note: note || "",
+    status: "active",
+    isSystemCorrection: false,
+    createdBy,
+    createdAt: ts,
+    updatedAt: ts
+  });
 }

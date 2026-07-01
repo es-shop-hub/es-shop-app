@@ -22,6 +22,10 @@ import {
   getNearestExpiration,
   refreshProductExpirationCache
 } from "./expiration.js";
+import {
+  computeStockIncreaseFundingAmount,
+  recordStockFundingExpense
+} from "./finance/data.js";
 
 // --- AUTH ---
 const auth = getAuth();
@@ -249,6 +253,8 @@ async function processPurchaseOnline(data) {
   await addDoc(purchaseItemsCol, purchaseItemPayload);
 
   let diffExpense = 0;
+  let stockBefore = 0;
+  let unitPriceUsed = 0;
 
   await runTransaction(db, async (tx) => {
 
@@ -273,6 +279,8 @@ async function processPurchaseOnline(data) {
       Number(
         productDataTx?.stock_current || 0
       );
+
+    stockBefore = currentStock;
 
     const oldBuyPrice =
       Number(
@@ -303,6 +311,12 @@ async function processPurchaseOnline(data) {
           * quantity;
 
       }
+
+      unitPriceUsed = unitPrice;
+
+    } else if (oldBuyPrice > 0) {
+
+      unitPriceUsed = oldBuyPrice;
 
     }
 
@@ -357,12 +371,36 @@ async function processPurchaseOnline(data) {
         type: "purchase_diff",
         amount: diffExpense,
         relatedPurchaseId: purchaseRef.id,
+        status: "active",
+        isSystemCorrection: false,
         createdBy,
         createdAt: now(),
         updatedAt: now()
       }
     );
 
+  }
+
+  const stockAfter = stockBefore + quantity;
+  const reinvestAmount = computeStockIncreaseFundingAmount(
+    stockBefore,
+    stockAfter,
+    unitPriceUsed
+  );
+
+  if (reinvestAmount > 0) {
+    const productLabel = productData.name || "Produit";
+
+    await recordStockFundingExpense({
+      category: "reinvestment",
+      amount: reinvestAmount,
+      reason: `Réinvestissement — ${productLabel} (×${quantity})`,
+      relatedTo: productId,
+      relatedPurchaseId: purchaseRef.id,
+      note: supplier || "",
+      createdBy,
+      createdAt: now()
+    });
   }
 
   await writeLog({
@@ -377,29 +415,6 @@ async function processPurchaseOnline(data) {
       expirationDate: expirationDateStr || null
     }
   });
-
-  const reinvestAmount =
-    totalCost > 0
-      ? totalCost
-      : quantity * Number(productData.price_buy || 0);
-
-  if (reinvestAmount > 0) {
-    const productLabel = productData.name || "Produit";
-    console.log("[purchases] auto expense reinvestment", reinvestAmount);
-
-    await addDoc(collection(db, "expenses"), {
-      reason: `Réinvestissement — ${productLabel} (×${quantity})`,
-      category: "reinvestment",
-      type: "auto",
-      amount: reinvestAmount,
-      relatedTo: productId,
-      relatedPurchaseId: purchaseRef.id,
-      note: supplier || "",
-      createdBy,
-      createdAt: now(),
-      updatedAt: now()
-    });
-  }
 
 }
 
@@ -876,6 +891,8 @@ async function applyManualStockUpdate(productId, newQty, expirationDateStr = "")
     throw new Error("Date expiration requise pour entrée stock");
   }
 
+  const stockBefore = Number(productData.stock_current || 0);
+
   await runTransaction(db, async (tx) => {
     const prodSnap = await tx.get(prodRef);
 
@@ -936,6 +953,27 @@ async function applyManualStockUpdate(productId, newQty, expirationDateStr = "")
       createdAt: serverTimestamp()
     });
   });
+
+  const reinvestAmount = computeStockIncreaseFundingAmount(
+    stockBefore,
+    newQty,
+    Number(productData.price_buy || 0)
+  );
+
+  if (reinvestAmount > 0) {
+    const productLabel = productData.name || "Produit";
+    const diff = newQty - stockBefore;
+
+    await recordStockFundingExpense({
+      category: "reinvestment",
+      amount: reinvestAmount,
+      reason: `Réinvestissement — ${productLabel} (correction +${diff})`,
+      relatedTo: productId,
+      note: "Mise à jour manuelle stock",
+      createdBy: currentUserId,
+      createdAt: serverTimestamp()
+    });
+  }
 
   if (productHasExpiration) {
     const movements = await loadProductMovements(productId);

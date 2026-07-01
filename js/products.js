@@ -21,6 +21,10 @@ import {
   formatExpirationDate,
   buildBatchId
 } from "./expiration.js";
+import {
+  computeStockIncreaseFundingAmount,
+  recordStockFundingExpense
+} from "./finance/data.js";
 
 // --- DOM ---
 const tableBody = document.getElementById('products-table');
@@ -39,6 +43,7 @@ const productModal = document.getElementById("productModal");
 const productModalTitle = document.getElementById("productModalTitle");
 const productModalError = document.getElementById("productModalError");
 const productStockField = document.getElementById("productStockField");
+const productFundingFields = document.getElementById("productFundingFields");
 const productMinOfflineField = document.getElementById("productMinOfflineField");
 const productExpirationFields = document.getElementById("productExpirationFields");
 const productExpirationDateField = document.getElementById("productExpirationDateField");
@@ -211,6 +216,19 @@ function openProductModal(mode, data = null) {
     productStockField.classList.toggle("field-hidden", mode !== "add");
   }
 
+  if (productFundingFields) {
+    productFundingFields.classList.toggle("field-hidden", mode !== "add");
+  }
+
+  const fundingInvestment = document.getElementById("productFundingInvestment");
+  const fundingReinvestment = document.getElementById("productFundingReinvestment");
+  if (fundingInvestment) {
+    fundingInvestment.checked = false;
+  }
+  if (fundingReinvestment) {
+    fundingReinvestment.checked = false;
+  }
+
   const offlineAllowed = document.getElementById("productOfflineAllowed");
   if (offlineAllowed) {
     offlineAllowed.value = data?.offlineBlocked ? "NON" : "OUI";
@@ -306,7 +324,11 @@ function readProductForm() {
       expirationFeatureEnabled &&
       document.getElementById("productHasExpiration")?.checked === true,
     expirationDateStr:
-      document.getElementById("productExpirationDate")?.value || ""
+      document.getElementById("productExpirationDate")?.value || "",
+    isInvestment:
+      document.getElementById("productFundingInvestment")?.checked === true,
+    isReinvestment:
+      document.getElementById("productFundingReinvestment")?.checked === true
   };
 }
 
@@ -358,6 +380,10 @@ function validateProductForm(data, mode) {
     !data.expirationDateStr
   ) {
     throw new Error("Date expiration requise pour produit périssable");
+  }
+
+  if (mode === "add" && !data.isInvestment && !data.isReinvestment) {
+    throw new Error("Cochez Investissement ou Réinvestissement");
   }
 
   return data;
@@ -460,7 +486,9 @@ async function processProductCreateOnline(data) {
     minOfflineStock,
     createdBy,
     hasExpiration,
-    expirationDateStr
+    expirationDateStr,
+    isInvestment,
+    isReinvestment
   } = data;
 
   await checkUser(createdBy);
@@ -531,22 +559,43 @@ async function processProductCreateOnline(data) {
     }
   });
 
-  const investAmount = Number(price_buy) * Number(stock);
+  const fundingAmount = Number(price_buy) * Number(stock);
+  const productLabel = `${name}${variant ? ` (${variant})` : ""}`;
 
-  if (investAmount > 0) {
-    console.log("[products] auto expense investment", investAmount);
+  if (fundingAmount > 0) {
+    const expenseTasks = [];
 
-    await addDoc(collection(db, "expenses"), {
-      reason: `Investissement — ${name}${variant ? ` (${variant})` : ""}`,
-      category: "investment",
-      type: "auto",
-      amount: investAmount,
-      relatedTo: prodRef.id,
-      note: `Stock initial: ${stock}`,
-      createdBy,
-      createdAt: now,
-      updatedAt: now
-    });
+    if (isInvestment) {
+      expenseTasks.push(
+        recordStockFundingExpense({
+          category: "investment",
+          amount: fundingAmount,
+          reason: `Investissement — ${productLabel}`,
+          relatedTo: prodRef.id,
+          note: `Stock initial: ${stock}`,
+          createdBy,
+          createdAt: now
+        })
+      );
+    }
+
+    if (isReinvestment) {
+      expenseTasks.push(
+        recordStockFundingExpense({
+          category: "reinvestment",
+          amount: fundingAmount,
+          reason: `Réinvestissement — ${productLabel}`,
+          relatedTo: prodRef.id,
+          note: `Stock initial: ${stock}`,
+          createdBy,
+          createdAt: now
+        })
+      );
+    }
+
+    if (expenseTasks.length) {
+      await Promise.all(expenseTasks);
+    }
   }
 
 }

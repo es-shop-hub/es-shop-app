@@ -456,6 +456,28 @@ nav .nav-item.active{
   color:#333;
 }
 
+.modal-content label.checkbox-label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:600;
+  margin:8px 0;
+  cursor:pointer;
+}
+
+.modal-content label.checkbox-label input[type="checkbox"]{
+  width:auto;
+  margin:0;
+}
+
+.field-hint{
+  margin:6px 0 0;
+  font-size:12px;
+  line-height:1.45;
+  color:#555;
+  font-weight:400;
+}
+
 .modal-content input,
 .modal-content select{
   width:100%;
@@ -572,6 +594,22 @@ nav .nav-item.active{
     <div id="productStockField">
       <label for="productStockInitial">Stock initial</label>
       <input type="number" id="productStockInitial" min="0" step="1">
+    </div>
+
+    <div id="productFundingFields">
+      <p class="field-hint" style="margin-bottom:8px;font-weight:600;color:#333;">Origine du stock initial</p>
+      <label class="checkbox-label" for="productFundingInvestment">
+        <input type="checkbox" id="productFundingInvestment">
+        Investissement
+      </label>
+      <label class="checkbox-label" for="productFundingReinvestment">
+        <input type="checkbox" id="productFundingReinvestment">
+        Réinvestissement
+      </label>
+      <p id="productFundingHelp" class="field-hint">
+        Réinvestissement = achat de ces produits par l'argent des bénéfices de l'entreprise.
+        Investissement = achat de ces produits par un apport extérieur.
+      </p>
     </div>
 
     <label for="productOfflineAllowed">Autoriser ventes hors connexion</label>
