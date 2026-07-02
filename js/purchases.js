@@ -23,9 +23,13 @@ import {
   refreshProductExpirationCache
 } from "./expiration.js";
 import {
-  computeStockIncreaseFundingAmount,
   recordStockFundingExpense
 } from "./finance/data.js";
+
+const PURCHASE_FUNDING_LABELS = {
+  investment: "Investissement",
+  reinvestment: "Réinvestissement"
+};
 
 // --- AUTH ---
 const auth = getAuth();
@@ -55,10 +59,21 @@ const stockAdjustError = document.getElementById("stockAdjustError");
 const stockNewQtyInput = document.getElementById("stockNewQty");
 const purchaseExpirationField = document.getElementById("purchaseExpirationField");
 const purchaseExpirationDateInput = document.getElementById("purchaseExpirationDate");
+const purchaseFundingAmountInput = document.getElementById("purchaseFundingAmount");
+const purchaseFundingAmountField = document.getElementById("purchaseFundingAmountField");
+const purchaseFundingHint = document.getElementById("purchaseFundingHint");
+const purchaseCostPreview = document.getElementById("purchaseCostPreview");
 const stockAdjustExpirationField = document.getElementById("stockAdjustExpirationField");
 const stockAdjustExpirationDateInput = document.getElementById("stockAdjustExpirationDate");
 
 const DEFAULT_MARGIN = 1.3;
+
+let fundingSuggestTimer = null;
+let lastFundingContext = {
+  purchaseCost: 0,
+  profitSinceLastPurchase: 0,
+  reinvestSuggested: 0
+};
 
 async function loadCurrencyConfig() {
   try {
@@ -89,6 +104,259 @@ function syncPurchaseExpirationField() {
   }
 }
 
+function getSelectedPurchaseFundingType() {
+  return document.querySelector('input[name="purchaseFundingType"]:checked')?.value || "";
+}
+
+function getEffectiveUnitPrice(productId, unitPriceInput) {
+  const product = allProducts.find(p => p.id === productId);
+
+  if (unitPriceInput !== null && unitPriceInput > 0) {
+    return unitPriceInput;
+  }
+
+  return Number(product?.price_buy || 0);
+}
+
+function getPurchaseCostFromForm() {
+  const productId = productSelect?.value || "";
+  const quantity = parseInt(document.getElementById("quantity")?.value, 10);
+  const unitPriceRaw = document.getElementById("unitPrice")?.value?.trim();
+  const unitPrice =
+    unitPriceRaw === "" ? null : Number(unitPriceRaw);
+
+  if (!productId || !Number.isInteger(quantity) || quantity <= 0) {
+    return 0;
+  }
+
+  const effectivePrice = getEffectiveUnitPrice(productId, unitPrice);
+
+  return effectivePrice > 0 ? quantity * effectivePrice : 0;
+}
+
+async function getLastPurchaseDateForProduct(productId) {
+  const snap = await getDocs(
+    query(purchaseItemsCol, where("productId", "==", productId))
+  );
+
+  let latestMs = null;
+
+  snap.docs.forEach(itemDoc => {
+    const createdAt = itemDoc.data()?.createdAt;
+    const time = createdAt?.toDate?.()?.getTime();
+
+    if (time != null && (latestMs === null || time > latestMs)) {
+      latestMs = time;
+    }
+  });
+
+  return latestMs ? new Date(latestMs) : null;
+}
+
+async function getProductProfitSince(productId, sinceDate) {
+  const sinceMs = sinceDate ? sinceDate.getTime() : 0;
+
+  const itemsSnap = await getDocs(
+    query(collection(db, "sale_items"), where("productId", "==", productId))
+  );
+
+  const pendingItems = [];
+  const saleIds = new Set();
+
+  itemsSnap.docs.forEach(itemDoc => {
+    const data = itemDoc.data();
+    const time = data.createdAt?.toDate?.()?.getTime() ?? 0;
+
+    if (time >= sinceMs && data.saleId) {
+      pendingItems.push(data);
+      saleIds.add(data.saleId);
+    }
+  });
+
+  if (!pendingItems.length) {
+    return 0;
+  }
+
+  const activeSaleIds = new Set();
+  const saleIdList = [...saleIds];
+
+  for (let i = 0; i < saleIdList.length; i += 10) {
+    const chunk = saleIdList.slice(i, i + 10);
+
+    await Promise.all(
+      chunk.map(async (saleId) => {
+        const saleSnap = await getDoc(doc(db, "sales", saleId));
+
+        if (saleSnap.exists() && saleSnap.data()?.status === "active") {
+          activeSaleIds.add(saleId);
+        }
+      })
+    );
+  }
+
+  return pendingItems.reduce((sum, item) => {
+    if (!activeSaleIds.has(item.saleId)) {
+      return sum;
+    }
+
+    return sum + Number(item.profit || 0);
+  }, 0);
+}
+
+function syncPurchaseFundingAmountField(fundingType, { preserveUserEdit = true } = {}) {
+  if (purchaseFundingAmountField) {
+    const showAmount =
+      fundingType === "investment" || fundingType === "reinvestment";
+
+    purchaseFundingAmountField.classList.toggle("field-hidden", !showAmount);
+  }
+
+  if (!purchaseFundingAmountInput) {
+    return;
+  }
+
+  const showAmount =
+    fundingType === "investment" || fundingType === "reinvestment";
+
+  if (!showAmount) {
+    purchaseFundingAmountInput.value = "";
+    delete purchaseFundingAmountInput.dataset.userEdited;
+    return;
+  }
+
+  if (preserveUserEdit && purchaseFundingAmountInput.dataset.userEdited === "true") {
+    return;
+  }
+
+  const { purchaseCost, reinvestSuggested } = lastFundingContext;
+
+  if (fundingType === "investment") {
+    purchaseFundingAmountInput.value =
+      purchaseCost > 0 ? purchaseCost.toFixed(2) : "";
+    return;
+  }
+
+  if (fundingType === "reinvestment") {
+    purchaseFundingAmountInput.value =
+      reinvestSuggested > 0 ? reinvestSuggested.toFixed(2) : "";
+  }
+}
+
+async function refreshPurchaseFundingSuggestions() {
+  const productId = productSelect?.value || "";
+  const purchaseCost = getPurchaseCostFromForm();
+
+  if (purchaseCostPreview) {
+    purchaseCostPreview.textContent =
+      purchaseCost > 0
+        ? `Coût achat estimé : ${purchaseCost.toFixed(2)} ${CURRENCY_SYMBOL}`
+        : "Coût achat estimé : — (saisissez produit, quantité et prix)";
+  }
+
+  if (!productId) {
+    lastFundingContext = {
+      purchaseCost: 0,
+      profitSinceLastPurchase: 0,
+      reinvestSuggested: 0
+    };
+
+    if (purchaseFundingHint) {
+      purchaseFundingHint.textContent =
+        "Sélectionnez un produit pour calculer le plafond de réinvestissement.";
+    }
+
+    syncPurchaseFundingAmountField(getSelectedPurchaseFundingType());
+    return;
+  }
+
+  let profitSince = 0;
+
+  try {
+    const lastPurchaseDate = await getLastPurchaseDateForProduct(productId);
+    profitSince = await getProductProfitSince(productId, lastPurchaseDate);
+  } catch (err) {
+    console.error(err);
+  }
+
+  const reinvestSuggested =
+    purchaseCost > 0
+      ? Math.min(purchaseCost, Math.max(0, profitSince))
+      : 0;
+
+  lastFundingContext = {
+    purchaseCost,
+    profitSinceLastPurchase: profitSince,
+    reinvestSuggested
+  };
+
+  if (purchaseFundingHint) {
+    purchaseFundingHint.textContent =
+      `Bénéfice produit depuis dernier achat : ${profitSince.toFixed(2)} ${CURRENCY_SYMBOL}. ` +
+      `Plafond réinvestissement suggéré : ${reinvestSuggested.toFixed(2)} ${CURRENCY_SYMBOL} ` +
+      `(min entre coût achat et bénéfice). Vous pouvez corriger le montant avant validation.`;
+  }
+
+  syncPurchaseFundingAmountField(getSelectedPurchaseFundingType());
+}
+
+function schedulePurchaseFundingRefresh() {
+  clearTimeout(fundingSuggestTimer);
+
+  fundingSuggestTimer = setTimeout(() => {
+    refreshPurchaseFundingSuggestions().catch(console.error);
+  }, 300);
+}
+
+function resetPurchaseFundingUi() {
+  if (purchaseFundingAmountInput) {
+    purchaseFundingAmountInput.value = "";
+    delete purchaseFundingAmountInput.dataset.userEdited;
+  }
+
+  lastFundingContext = {
+    purchaseCost: 0,
+    profitSinceLastPurchase: 0,
+    reinvestSuggested: 0
+  };
+
+  if (purchaseFundingHint) {
+    purchaseFundingHint.textContent =
+      "Choisissez le type de financement de cet achat.";
+  }
+
+  if (purchaseCostPreview) {
+    purchaseCostPreview.textContent = "Coût achat estimé : —";
+  }
+
+  if (purchaseFundingAmountField) {
+    purchaseFundingAmountField.classList.add("field-hidden");
+  }
+}
+
+function readPurchaseFundingFromForm() {
+  const fundingType = getSelectedPurchaseFundingType();
+  const amountRaw = purchaseFundingAmountInput?.value?.trim() || "";
+  const fundingAmount = amountRaw === "" ? NaN : Number(amountRaw);
+
+  return { fundingType, fundingAmount };
+}
+
+function validatePurchaseFunding(fundingType, fundingAmount) {
+  if (!fundingType) {
+    throw new Error("Sélectionnez le type de financement");
+  }
+
+  if (fundingType === "none") {
+    return { fundingType: "none", fundingAmount: 0 };
+  }
+
+  if (!Number.isFinite(fundingAmount) || fundingAmount <= 0) {
+    throw new Error("Montant financement invalide");
+  }
+
+  return { fundingType, fundingAmount };
+}
+
 async function loadProductMovements(productId) {
   const snap = await getDocs(
     query(
@@ -108,6 +376,7 @@ function closePurchaseForm() {
   purchaseForm.reset();
   purchaseForm.classList.remove("purchase-overlay");
   purchaseForm.style.display = "none";
+  resetPurchaseFundingUi();
   syncPurchaseExpirationField();
 }
 
@@ -117,6 +386,7 @@ function openPurchaseForm() {
   purchaseForm.style.display = "flex";
   purchaseForm.classList.add("purchase-overlay");
   syncPurchaseExpirationField();
+  schedulePurchaseFundingRefresh();
   document.getElementById("supplierName")?.focus();
 }
 
@@ -226,7 +496,9 @@ async function processPurchaseOnline(data) {
     quantity,
     unitPrice,
     createdBy,
-    expirationDateStr
+    expirationDateStr,
+    fundingType = "none",
+    fundingAmount = 0
   } = data;
 
   await checkUser(createdBy);
@@ -284,8 +556,6 @@ async function processPurchaseOnline(data) {
   await addDoc(purchaseItemsCol, purchaseItemPayload);
 
   let diffExpense = 0;
-  let stockBefore = 0;
-  let unitPriceUsed = 0;
 
   await runTransaction(db, async (tx) => {
 
@@ -310,8 +580,6 @@ async function processPurchaseOnline(data) {
       Number(
         productDataTx?.stock_current || 0
       );
-
-    stockBefore = currentStock;
 
     const oldBuyPrice =
       Number(
@@ -342,12 +610,6 @@ async function processPurchaseOnline(data) {
           * quantity;
 
       }
-
-      unitPriceUsed = unitPrice;
-
-    } else if (oldBuyPrice > 0) {
-
-      unitPriceUsed = oldBuyPrice;
 
     }
 
@@ -412,20 +674,19 @@ async function processPurchaseOnline(data) {
 
   }
 
-  const stockAfter = stockBefore + quantity;
-  const reinvestAmount = computeStockIncreaseFundingAmount(
-    stockBefore,
-    stockAfter,
-    unitPriceUsed
-  );
+  const productLabel = productData.name || "Produit";
+  const fundingValue = Number(fundingAmount) || 0;
 
-  if (reinvestAmount > 0) {
-    const productLabel = productData.name || "Produit";
+  if (
+    (fundingType === "investment" || fundingType === "reinvestment") &&
+    fundingValue > 0
+  ) {
+    const fundingLabel = PURCHASE_FUNDING_LABELS[fundingType] || fundingType;
 
     await recordStockFundingExpense({
-      category: "reinvestment",
-      amount: reinvestAmount,
-      reason: `Réinvestissement — ${productLabel} (×${quantity})`,
+      category: fundingType,
+      amount: fundingValue,
+      reason: `${fundingLabel} — ${productLabel} (×${quantity})`,
       relatedTo: productId,
       relatedPurchaseId: purchaseRef.id,
       note: supplier || "",
@@ -536,6 +797,20 @@ if (purchaseForm) {
       return;
     }
 
+    let fundingPayload;
+
+    try {
+      const rawFunding = readPurchaseFundingFromForm();
+      fundingPayload = validatePurchaseFunding(
+        rawFunding.fundingType,
+        rawFunding.fundingAmount
+      );
+    } catch (fundingErr) {
+      alert(fundingErr.message);
+      debug(fundingErr.message);
+      return;
+    }
+
     try {
 
       const productExists =
@@ -563,6 +838,8 @@ if (purchaseForm) {
             quantity,
             unitPrice,
             expirationDateStr: expirationDateStr || null,
+            fundingType: fundingPayload.fundingType,
+            fundingAmount: fundingPayload.fundingAmount,
             createdBy: currentUserId,
             createdAt: Date.now()
           }
@@ -595,6 +872,8 @@ if (purchaseForm) {
         quantity,
         unitPrice,
         expirationDateStr: expirationDateStr || null,
+        fundingType: fundingPayload.fundingType,
+        fundingAmount: fundingPayload.fundingAmount,
         createdBy: currentUserId
       });
 
@@ -810,6 +1089,7 @@ function openPurchaseForProduct(product) {
 
   productSelect.value = product.id;
   syncPurchaseExpirationField();
+  schedulePurchaseFundingRefresh();
 
   window.scrollTo({
     top: 0,
@@ -1046,6 +1326,26 @@ try {
 
 productSelect?.addEventListener("change", () => {
   syncPurchaseExpirationField();
+  schedulePurchaseFundingRefresh();
+});
+
+document.getElementById("quantity")?.addEventListener("input", schedulePurchaseFundingRefresh);
+document.getElementById("unitPrice")?.addEventListener("input", schedulePurchaseFundingRefresh);
+
+document.querySelectorAll('input[name="purchaseFundingType"]').forEach(radio => {
+  radio.addEventListener("change", () => {
+    if (purchaseFundingAmountInput) {
+      delete purchaseFundingAmountInput.dataset.userEdited;
+    }
+
+    syncPurchaseFundingAmountField(getSelectedPurchaseFundingType(), {
+      preserveUserEdit: false
+    });
+  });
+});
+
+purchaseFundingAmountInput?.addEventListener("input", () => {
+  purchaseFundingAmountInput.dataset.userEdited = "true";
 });
 
 // --- INIT ---
