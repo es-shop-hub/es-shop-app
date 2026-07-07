@@ -1,5 +1,5 @@
 // firebase.js offline 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 
 import {
   initializeFirestore,
@@ -26,16 +26,16 @@ import {
   limit,
   onSnapshot
 
-} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAwY95NM8QKiRxNHvfxiGrjvhKG16Lpl5E",
-  authDomain: "test-stockflow-offline.firebaseapp.com",
-  projectId: "test-stockflow-offline",
-  storageBucket: "test-stockflow-offline.firebasestorage.app",
-  messagingSenderId: "721689942624",
-  appId: "1:721689942624:web:a29d362e5fccd7e2ce4105",
-  measurementId: "G-67C96ZB39P"
+  apiKey: "AIzaSyD8_86DgCqPdwVNy1ww6PPz0TM5lVMWm_s",
+  authDomain: "es-shop-db.firebaseapp.com",
+  projectId: "es-shop-db",
+  storageBucket: "es-shop-db.firebasestorage.app",
+  messagingSenderId: "750093706451",
+  appId: "1:750093706451:web:62f0aa0891d0ed0ed96026",
+  measurementId: "G-TM3YYR5ZH7"
 };
 
 const app = initializeApp(firebaseConfig);
