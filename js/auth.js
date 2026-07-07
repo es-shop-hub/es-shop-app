@@ -23,7 +23,7 @@ import {
   browserSessionPersistence,
   inMemoryPersistence,
   connectAuthEmulator
-} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
 const auth = getFirebaseAuth(app);
 
