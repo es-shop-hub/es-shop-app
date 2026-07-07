@@ -17,6 +17,32 @@ form-action 'self';
 ">
 <title>StockFlow — Gestion lots</title>
 <link rel="stylesheet" href="css/batch.css">
+<style>
+#calcBtn{
+  position:fixed;
+  right:14px;
+  top:clamp(120px, 15vh, 280px);
+  width:30px;
+  height:30px;
+  border:none;
+  border-radius:50%;
+  background:#0B3D2E;
+  color:#fff;
+  font-size:16px;
+  cursor:pointer;
+  z-index:11000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 4px 10px rgba(0,0,0,.18);
+  transition:transform .2s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+
+#calcBtn:active{
+  transform:scale(.95);
+}
+</style>
 </head>
 <body>
 
@@ -24,6 +50,8 @@ form-action 'self';
   <h3>StockFlow — Gestion lots</h3>
   <div class="status" id="status">● …</div>
 </header>
+
+<button type="button" id="calcBtn" aria-label="Calculatrice">➕</button>
 
 <div class="container">
 
@@ -142,5 +170,6 @@ form-action 'self';
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/batch-management.js"></script>
+<script type="module" src="../js/calcule.js"></script>
 </body>
 </html>

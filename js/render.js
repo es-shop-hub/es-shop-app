@@ -88,6 +88,8 @@ export async function render(chartApi) {
     previousPeriod.losses
   );
 
+  renderOperationalFinance(sales, expenses, losses);
+
   renderFinancialHealth(sales, expenses, losses);
   renderStockHealth();
   renderDebts();
@@ -108,6 +110,58 @@ function sumExpensesByCategory(expenses, category) {
     .reduce((s, e) => s + n(e.amount), 0);
 }
 
+function sumOperatingExpenses(expenses) {
+  return expenses
+    .filter(e => e.category !== "investment" && e.category !== "reinvestment")
+    .reduce((s, e) => s + n(e.amount), 0);
+}
+
+function calcGrossProfitFromSales(sales) {
+  const saleIds = new Set(sales.map(s => s.id));
+
+  return state.saleItems
+    .filter(i => saleIds.has(i.saleId))
+    .reduce((sum, i) => sum + n(i.profit), 0);
+}
+
+function calcActiveLossesTotal(losses) {
+  return losses
+    .filter(e => e.isSystemCorrection !== true && e.status !== "cancelled")
+    .reduce((sum, e) => sum + n(e.amount), 0);
+}
+
+function renderOperationalFinance(sales, expenses, losses) {
+  const grossProfit = calcGrossProfitFromSales(sales);
+  const operatingExpenses = sumOperatingExpenses(expenses);
+  const investmentTotal = sumExpensesByCategory(expenses, "investment");
+  const reinvestmentTotal = sumExpensesByCategory(expenses, "reinvestment");
+  const lossesTotal = calcActiveLossesTotal(losses);
+  const operationalNetProfit = grossProfit - operatingExpenses - lossesTotal;
+
+  const saleIds = new Set(sales.map(s => s.id));
+  const totalSales = state.saleItems
+    .filter(i => saleIds.has(i.saleId))
+    .reduce((sum, i) => sum + n(i.price) * n(i.quantity), 0);
+
+  const operationalMargin = totalSales > 0
+    ? (operationalNetProfit / totalSales) * 100
+    : 0;
+
+  setText("opGrossProfitValue", formatMoney(grossProfit));
+  setText("opExpensesValue", formatMoney(operatingExpenses));
+  setText("opLossesValue", formatMoney(lossesTotal));
+  setText("opExcludedInvestmentValue", formatMoney(investmentTotal));
+  setText("opExcludedReinvestmentValue", formatMoney(reinvestmentTotal));
+  setText("opNetProfitValue", formatMoney(operationalNetProfit));
+
+  const noteEl = $("opFinanceNote");
+  if (noteEl) {
+    noteEl.textContent =
+      `Bénéfice net opérationnel = marge ventes − dépenses hors invest./réinvest. − pertes. ` +
+      `Marge opérationnelle : ${operationalMargin.toFixed(1)}%.`;
+  }
+}
+
 function calcPotentialMinProfit(products) {
   return products.reduce((sum, p) => {
     const buy = n(p.price_buy);
@@ -121,9 +175,7 @@ function renderFinancialHealth(sales, expenses, losses) {
   const investmentTotal = sumExpensesByCategory(expenses, "investment");
   const reinvestmentTotal = sumExpensesByCategory(expenses, "reinvestment");
 
-  const operatingExpenses = expenses
-    .filter(e => e.category !== "investment" && e.category !== "reinvestment")
-    .reduce((s, e) => s + n(e.amount), 0);
+  const operatingExpenses = sumOperatingExpenses(expenses);
 
   const expensesTotal = expenses.reduce((s, e) => s + n(e.amount), 0);
 

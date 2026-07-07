@@ -384,6 +384,32 @@ nav .nav-item.active{
   width: 250px;
   font-size: 13px;
 }
+
+#calcBtn{
+  position:fixed;
+  right:14px;
+  top:clamp(120px, 15vh, 280px);
+  width:30px;
+  height:30px;
+  border:none;
+  border-radius:50%;
+  background:#0B3D2E;
+  color:#fff;
+  font-size:16px;
+  cursor:pointer;
+  z-index:11000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 4px 10px rgba(0,0,0,.18);
+  transition:transform .2s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+
+#calcBtn:active{
+  transform:scale(.95);
+}
+
 #debug{
   position:fixed;
   left:50%;
@@ -540,6 +566,8 @@ nav .nav-item.active{
 <div class="search-box">
   <input type="text" id="searchInput" placeholder="Rechercher produit...">
 </div>
+
+<button type="button" id="calcBtn" aria-label="Calculatrice">➕</button>
 
 <div class="container">
 
@@ -698,6 +726,7 @@ nav .nav-item.active{
 </nav>
 
 <script type="module" src="js/products.js"></script>
+<script type="module" src="js/calcule.js"></script>
 <script src="js/nav.js"></script>
 
 </body>

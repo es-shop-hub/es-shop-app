@@ -246,6 +246,77 @@ main{
   color:var(--muted);
 }
 
+/* SUIVI FINANCIER OPÉRATIONNEL */
+
+.finance-track{
+  background:var(--card);
+  border-radius:var(--radius);
+  padding:16px;
+  box-shadow:var(--shadow);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.finance-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:10px 12px;
+  border-radius:10px;
+  background:#F9FAFB;
+}
+
+.finance-row-negative .finance-value{
+  color:var(--danger);
+}
+
+.finance-row-info{
+  background:transparent;
+  padding:6px 12px;
+}
+
+.finance-row-info .finance-label,
+.finance-row-info .finance-value{
+  font-size:12px;
+  color:var(--muted);
+}
+
+.finance-row-total{
+  margin-top:4px;
+  background:var(--primary);
+  color:#fff;
+}
+
+.finance-row-total .finance-label,
+.finance-row-total .finance-value{
+  color:#fff;
+  font-weight:700;
+}
+
+.finance-row-total .finance-value{
+  font-size:20px;
+}
+
+.finance-label{
+  font-size:13px;
+  font-weight:600;
+}
+
+.finance-value{
+  font-size:15px;
+  font-weight:800;
+  text-align:right;
+}
+
+.finance-note{
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.5;
+  padding:0 4px;
+}
+
 /* CHARTS */
 
 .chart-card{
@@ -762,6 +833,55 @@ nav .nav-item.active{
         </div>
       </div>
 
+    </div>
+
+  </section>
+
+  <section class="section" id="operationalFinanceSection">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Suivi financier opérationnel</div>
+        <div class="section-subtitle">
+          Dépenses et bénéfices hors investissements et réinvestissements
+        </div>
+      </div>
+    </div>
+
+    <div class="finance-track" id="operationalFinanceTrack">
+      <div class="finance-row">
+        <span class="finance-label">Bénéfice brut (marge ventes)</span>
+        <span class="finance-value" id="opGrossProfitValue">0$</span>
+      </div>
+
+      <div class="finance-row finance-row-negative">
+        <span class="finance-label">Dépenses opérationnelles</span>
+        <span class="finance-value" id="opExpensesValue">0$</span>
+      </div>
+
+      <div class="finance-row finance-row-negative">
+        <span class="finance-label">Pertes</span>
+        <span class="finance-value" id="opLossesValue">0$</span>
+      </div>
+
+      <div class="finance-row finance-row-info">
+        <span class="finance-label">Exclu — investissements</span>
+        <span class="finance-value" id="opExcludedInvestmentValue">0$</span>
+      </div>
+
+      <div class="finance-row finance-row-info">
+        <span class="finance-label">Exclu — réinvestissements</span>
+        <span class="finance-value" id="opExcludedReinvestmentValue">0$</span>
+      </div>
+
+      <div class="finance-row finance-row-total">
+        <span class="finance-label">Bénéfice net opérationnel</span>
+        <span class="finance-value" id="opNetProfitValue">0$</span>
+      </div>
+
+      <p class="finance-note" id="opFinanceNote">
+        Le bénéfice net opérationnel = marge ventes − dépenses (hors invest./réinvest.) − pertes.
+      </p>
     </div>
 
   </section>

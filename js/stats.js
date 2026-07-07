@@ -534,10 +534,32 @@ function buildPdfPayload() {
     0
   );
 
+  const operatingExpenses = expenses
+    .filter(item =>
+      item.category !== "investment" &&
+      item.category !== "reinvestment"
+    )
+    .reduce((sum, item) => sum + n(item.amount), 0);
+
+  const excludedInvestment = expenses
+    .filter(item => item.category === "investment")
+    .reduce((sum, item) => sum + n(item.amount), 0);
+
+  const excludedReinvestment = expenses
+    .filter(item => item.category === "reinvestment")
+    .reduce((sum, item) => sum + n(item.amount), 0);
+
   const totalLosses = activeLosses.reduce(
     (sum, item) => sum + n(item.amount),
     0
   );
+
+  const grossProfitFromItems = saleItems
+    .filter(item => sales.some(sale => sale.id === item.saleId))
+    .reduce((sum, item) => sum + n(item.profit), 0);
+
+  const operationalNetProfit =
+    grossProfitFromItems - operatingExpenses - totalLosses;
 
   const totalDebtRemaining = openDebts.reduce(
     (sum, item) => sum + n(item.amount_remaining),
@@ -600,7 +622,12 @@ function buildPdfPayload() {
       totalExpenses,
       totalLosses,
       totalDebtRemaining,
-      netProfit
+      netProfit,
+      grossProfitFromItems,
+      operatingExpenses,
+      excludedInvestment,
+      excludedReinvestment,
+      operationalNetProfit
     },
     sales: salesWithProducts,
     debts: debts.map(debt => ({

@@ -73,6 +73,16 @@ function build(){
         n(data.kpis?.totalDebtRemaining),
       netProfit:
         n(data.kpis?.netProfit),
+      grossProfitFromItems:
+        n(data.kpis?.grossProfitFromItems),
+      operatingExpenses:
+        n(data.kpis?.operatingExpenses),
+      excludedInvestment:
+        n(data.kpis?.excludedInvestment),
+      excludedReinvestment:
+        n(data.kpis?.excludedReinvestment),
+      operationalNetProfit:
+        n(data.kpis?.operationalNetProfit),
       stockValue
     },
     sales,
@@ -207,6 +217,16 @@ export function exportStatsPdf() {
     row("Losses", money(data.kpis.totalLosses));
     row("Debts", money(data.kpis.totalDebtRemaining));
     row("Net Profit", money(data.kpis.netProfit));
+
+    y += 4;
+
+    section("OPERATIONAL FINANCE");
+
+    row("Gross Profit (sales margin)", money(data.kpis.grossProfitFromItems));
+    row("Operating Expenses", money(data.kpis.operatingExpenses));
+    row("Excluded Investments", money(data.kpis.excludedInvestment));
+    row("Excluded Reinvestments", money(data.kpis.excludedReinvestment));
+    row("Operational Net Profit", money(data.kpis.operationalNetProfit));
 
     y += 4;
 
