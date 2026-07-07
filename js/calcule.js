@@ -7,35 +7,80 @@ if (!calcBtn) {
 let calcOpened = false;
 let calcTargetInput = null;
 
+function isInsideCalculator(el) {
+  return Boolean(el?.closest?.(".sf-calc-box"));
+}
+
+function isCalcInjectableInput(el) {
+  if (!(el instanceof HTMLInputElement) || el.readOnly || el.disabled) {
+    return false;
+  }
+
+  if (isInsideCalculator(el)) {
+    return false;
+  }
+
+  if (el.dataset.calcReject === "true") {
+    return false;
+  }
+
+  if (el.type === "number" || el.type === "text" || el.type === "") {
+    return true;
+  }
+
+  return el.dataset.calcAccept === "true";
+}
+
 document.addEventListener("focusin", (event) => {
   const el = event.target;
 
-  if (
-    el instanceof HTMLInputElement &&
-    (el.type === "number" || el.type === "text") &&
-    !el.readOnly &&
-    !el.disabled
-  ) {
+  if (isCalcInjectableInput(el)) {
     calcTargetInput = el;
   }
 });
+
+function formatCalcResult(result) {
+  if (
+    result === "Erreur" ||
+    result === undefined ||
+    result === null ||
+    Number.isNaN(result) ||
+    !Number.isFinite(result)
+  ) {
+    return "Erreur";
+  }
+
+  const num = Number(result);
+  return Number.isInteger(num) ? String(num) : String(Math.round(num * 100) / 100);
+}
+
+function resolveCalcTarget() {
+  if (calcTargetInput && document.contains(calcTargetInput) && isCalcInjectableInput(calcTargetInput)) {
+    return calcTargetInput;
+  }
+
+  const configuredTarget = calcBtn.dataset.calcTarget;
+  if (configuredTarget) {
+    const configured = document.getElementById(configuredTarget);
+    if (configured && isCalcInjectableInput(configured)) {
+      return configured;
+    }
+  }
+
+  const amountPaid = document.getElementById("amountPaid");
+  if (amountPaid && isCalcInjectableInput(amountPaid)) {
+    return amountPaid;
+  }
+
+  return null;
+}
 
 function applyCalcResult(value) {
   if (value === "Erreur" || value === "" || value === undefined || value === null) {
     return;
   }
 
-  const configuredTarget = calcBtn.dataset.calcTarget;
-  let target = null;
-
-  if (calcTargetInput && document.contains(calcTargetInput)) {
-    target = calcTargetInput;
-  } else if (configuredTarget) {
-    target = document.getElementById(configuredTarget);
-  } else {
-    target = document.getElementById("amountPaid");
-  }
-
+  const target = resolveCalcTarget();
   if (!target) return;
 
   target.value = String(value);
@@ -246,7 +291,7 @@ keys.forEach(key => {
     if (key === "C") {
       expression = "";
     } else if (key === "=") {
-      expression = String(safeCalculate(expression));
+      expression = formatCalcResult(safeCalculate(expression));
       applyCalcResult(expression);
     } else {
       expression += key;
