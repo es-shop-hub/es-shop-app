@@ -1,4 +1,4 @@
-const CACHE_NAME = "stockflow v3.0";
+const CACHE_NAME = "stockflow v3.00";
 const BASE_PATH =
   self.location.pathname.replace(/\/service-worker\.js$/, "") || "";
 const withBase = (path) => {
