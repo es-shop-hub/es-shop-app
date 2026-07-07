@@ -15,7 +15,8 @@ import {
 import {
   getAuth,
   onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+} from "./auth.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 
@@ -348,7 +349,8 @@ async function loadAppConfig() {
        BIND SAVE
     ========================= */
 
-    document.getElementById("saveConfigBtn").onclick = updateAppConfig;
+    const saveConfigBtn = document.getElementById("saveConfigBtn");
+    bindActionButton(saveConfigBtn, updateAppConfig);
 
   } catch (err) {
     console.error(err);
@@ -582,59 +584,59 @@ async function loadUsers() {
 
       /* ROLE BUTTON */  
       const roleBtn = createButton("Changer rôle", "btn-action");  
-      roleBtn.addEventListener("click", async () => {  
-        try {  
-          const nextRole = data.role === "admin" ? "seller" : "admin";  
-          await updateDoc(doc(db, "users", userId), {  
-            role: nextRole,  
-            updatedAt: serverTimestamp()  
-          });  
+      bindActionButton(roleBtn, async () => {
+        try {
+          const nextRole = data.role === "admin" ? "seller" : "admin";
+          await updateDoc(doc(db, "users", userId), {
+            role: nextRole,
+            updatedAt: serverTimestamp()
+          });
           await writeLog({
             userId: currentUserId,
             action: "user_role_update",
             targetId: userId,
             details: { nextRole }
           });
-          showMessage("Rôle mis à jour");  
-          loadUsers();  
-        } catch (err) {  
-          console.error(err);  
-          alert("Erreur modification rôle");  
-        }  
-      });  
+          showMessage("Rôle mis à jour");
+          loadUsers();
+        } catch (err) {
+          console.error(err);
+          alert("Erreur modification rôle");
+        }
+      });
 
       /* STATUS BUTTON */  
       const statusBtn = createButton(
         data.isActive === false ? "Activer" : "Désactiver",
         data.isActive === false ? "btn-success" : "btn-warning"
       );  
-      statusBtn.addEventListener("click", async () => {  
-        try {  
-          await updateDoc(doc(db, "users", userId), {  
-            isActive: data.isActive === false,  
-            updatedAt: serverTimestamp()  
-          });  
+      bindActionButton(statusBtn, async () => {
+        try {
+          await updateDoc(doc(db, "users", userId), {
+            isActive: data.isActive === false,
+            updatedAt: serverTimestamp()
+          });
           await writeLog({
             userId: currentUserId,
             action: "user_status_update",
             targetId: userId,
             details: { isActive: data.isActive === false }
           });
-          showMessage("Utilisateur mis à jour");  
-          loadUsers();  
-        } catch (err) {  
-          console.error(err);  
-          alert("Erreur statut utilisateur");  
-        }  
-      });  
+          showMessage("Utilisateur mis à jour");
+          loadUsers();
+        } catch (err) {
+          console.error(err);
+          alert("Erreur statut utilisateur");
+        }
+      });
 
       /* DELETE BUTTON */  
-      const deleteBtn = createButton("Supprimer", "btn-danger");  
-      deleteBtn.addEventListener("click", async () => {  
-        if (userId === currentUserId) {  
-          alert("Impossible de supprimer ton compte");  
-          return;  
-        }  
+      const deleteBtn = createButton("Supprimer", "btn-danger");
+      bindActionButton(deleteBtn, async () => {
+        if (userId === currentUserId) {
+          alert("Impossible de supprimer ton compte");
+          return;
+        }
         const confirmDelete = await showConfirmModal(
           "Supprimer utilisateur",
           "Supprimer cet utilisateur ?"
@@ -661,12 +663,12 @@ async function loadUsers() {
             action: "user_delete",
             targetId: userId
           });
-          showMessage("Utilisateur supprimé");  
+          showMessage("Utilisateur supprimé");
           loadUsers();
-        } catch (err) {  
-          console.error(err);  
-          alert("Erreur suppression");  
-        }  
+        } catch (err) {
+          console.error(err);
+          alert("Erreur suppression");
+        }
       });  
 
       actionsTd.appendChild(roleBtn);  

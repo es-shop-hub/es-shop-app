@@ -26,6 +26,7 @@ import {
 } from "./finance/notifications.js";
 import { showToast } from "./finance/toast.js";
 import { injectOptions } from "./filter.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 let currentUserId = null;
@@ -198,7 +199,7 @@ async function submitExpenseEdit() {
   }
 }
 
-document.getElementById("addExpenseBtn")?.addEventListener("click", async () => {
+bindActionButton(document.getElementById("addExpenseBtn"), async () => {
   const label = document.getElementById("label")?.value.trim();
   const category = document.getElementById("category")?.value;
   const amount = Number(document.getElementById("amount")?.value);
@@ -251,7 +252,7 @@ document.getElementById("applyFirebaseFilter")?.addEventListener("click", () => 
   loadData(true);
 });
 
-document.getElementById("expenseEditSaveBtn")?.addEventListener("click", submitExpenseEdit);
+bindActionButton(document.getElementById("expenseEditSaveBtn"), submitExpenseEdit);
 document.getElementById("expenseEditCancelBtn")?.addEventListener("click", () => {
   closeActionModal(expenseEditModal, document.getElementById("expenseEditError"));
 });

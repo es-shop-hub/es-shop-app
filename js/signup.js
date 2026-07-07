@@ -26,6 +26,7 @@ import {
 } from "./auth-flow.js";
 
 import { initPasswordToggles } from "./password-toggle.js";
+import { bindFormAction, bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 const signupForm = document.getElementById("signupForm");
@@ -34,8 +35,7 @@ const googleProvider = new GoogleAuthProvider();
 
 initPasswordToggles();
 
-signupForm?.addEventListener("submit", async e => {
-  e.preventDefault();
+bindFormAction(signupForm, async () => {
 
   const fullName = document.getElementById("fullName")?.value.trim();
   const email = document.getElementById("email")?.value.trim().toLowerCase();
@@ -101,7 +101,7 @@ signupForm?.addEventListener("submit", async e => {
   }
 });
 
-googleSignupBtn?.addEventListener("click", async () => {
+bindActionButton(googleSignupBtn, async () => {
   try {
     await setPersistence(auth, browserLocalPersistence);
 

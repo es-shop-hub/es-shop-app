@@ -1,5 +1,6 @@
 // download.js v2
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 let provider = null;
 
@@ -193,7 +194,7 @@ export function exportStatsPdf() {
 
   /* ================= BUILD ================= */
 
-  (async () => {
+  return (async () => {
 
     await drawHeader(true);
 
@@ -285,5 +286,5 @@ export function initPdfExportButton() {
   const btn = document.getElementById("pdfBtn");
   if (!btn) return;
 
-  btn.addEventListener("click", exportStatsPdf);
+  bindActionButton(btn, exportStatsPdf);
 }

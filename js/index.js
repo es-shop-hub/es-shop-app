@@ -27,6 +27,7 @@ import {
 
 import { getAuth, onAuthStateChanged } from "./auth.js";
 import { generateReceipt } from "./receipt.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 
 // --- DOM ---
@@ -111,8 +112,6 @@ togglePaymentInput();
 // --- STATE ---
 let cart = [];
 let allProducts = [];
-let isProcessingSale = false;   // 🔒 LOCK PRINCIPAL
-let lastSaleTime = 0;           // 🔒 ANTI SPAM
 let expirationFeatureEnabled = false;
 let expirationAlertDays = 30;
 let movementsByProduct = {};
@@ -973,18 +972,9 @@ async function processSaleOnline(data) {
 }
 
 // --- SELL (ANTI DOUBLE) ---
-sellBtn.addEventListener('click', async () => {
-
-  if (isProcessingSale) return;
-
-  const nowTime = Date.now();
-  if (nowTime - lastSaleTime < 1500) return;
-  lastSaleTime = nowTime;
+bindActionButton(sellBtn, async () => {
 
   if (!cart.length) return;
-
-  isProcessingSale = true;
-  sellBtn.disabled = true;
 
   try {
 
@@ -1111,9 +1101,6 @@ sellBtn.addEventListener('click', async () => {
 
   } catch (e) {
     alert(e.message);
-  } finally {
-    isProcessingSale = false;
-    sellBtn.disabled = false;
   }
 });
 

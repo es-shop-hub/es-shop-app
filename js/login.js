@@ -21,6 +21,7 @@ import {
 } from "./auth-flow.js";
 
 import { initPasswordToggles } from "./password-toggle.js";
+import { bindFormAction, bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 const googleProvider = new GoogleAuthProvider();
@@ -50,8 +51,7 @@ async function redirectAfterLogin(userData, action) {
   window.location.replace("index.html");
 }
 
-loginForm?.addEventListener("submit", async e => {
-  e.preventDefault();
+bindFormAction(loginForm, async () => {
 
   const email = emailInput?.value.trim().toLowerCase() || "";
   const password = passwordInput?.value || "";
@@ -114,4 +114,4 @@ async function handleGoogleLogin() {
   }
 }
 
-googleLoginBtn?.addEventListener("click", handleGoogleLogin);
+bindActionButton(googleLoginBtn, handleGoogleLogin);

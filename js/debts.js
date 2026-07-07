@@ -33,6 +33,7 @@ import {
 } from "./finance/notifications.js";
 import { showToast } from "./finance/toast.js";
 import { injectOptions } from "./filter.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 let currentUserId = null;
@@ -311,7 +312,7 @@ async function submitDebtPayment() {
   }
 }
 
-document.getElementById("addDebtBtn")?.addEventListener("click", async () => {
+bindActionButton(document.getElementById("addDebtBtn"), async () => {
   const type = document.getElementById("debtType")?.value;
   const name = document.getElementById("debtName")?.value.trim();
   const totalRaw = document.getElementById("debtAmount")?.value;
@@ -408,7 +409,7 @@ document.getElementById("addDebtBtn")?.addEventListener("click", async () => {
 });
 
 document.getElementById("applyFirebaseFilter")?.addEventListener("click", () => loadData(true));
-document.getElementById("debtPaymentSaveBtn")?.addEventListener("click", submitDebtPayment);
+bindActionButton(document.getElementById("debtPaymentSaveBtn"), submitDebtPayment);
 document.getElementById("debtPaymentCancelBtn")?.addEventListener("click", () => {
   closeActionModal(debtPaymentModal, document.getElementById("debtPaymentError"));
 });

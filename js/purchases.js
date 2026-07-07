@@ -25,6 +25,7 @@ import {
 import {
   recordStockFundingExpense
 } from "./finance/data.js";
+import { bindFormAction, bindActionButton } from "./utils/buttonManager.js";
 
 const PURCHASE_FUNDING_LABELS = {
   investment: "Investissement",
@@ -712,8 +713,7 @@ async function processPurchaseOnline(data) {
 
 // --- AJOUT ACHAT ---
 if (purchaseForm) {
-  purchaseForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
+  bindFormAction(purchaseForm, async () => {
     if (!currentUserId) {
       alert("Utilisateur non connecté");
       debug("Utilisateur non connecté");
@@ -895,7 +895,7 @@ if (purchaseForm) {
         "Erreur lors de l'achat"
       );
     }
-  });
+  }, document.getElementById("purchaseSubmitBtn"));
 }
 
 // --- LOAD STOCK ---
@@ -1263,9 +1263,7 @@ async function applyManualStockUpdate(productId, newQty, expirationDateStr = "")
   await loadStock();
 }
 
-document.getElementById("stockAdjustSaveBtn")?.addEventListener("click", () => {
-  submitStockAdjust();
-});
+bindActionButton(document.getElementById("stockAdjustSaveBtn"), () => submitStockAdjust());
 
 document.getElementById("stockAdjustCancelBtn")?.addEventListener("click", () => {
   closeStockAdjustModal();

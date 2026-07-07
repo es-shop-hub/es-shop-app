@@ -12,6 +12,7 @@ import {
   formatDate,
   statusBadge
 } from "./batch-utils.js";
+import { bindActionButton } from "../../js/utils/buttonManager.js";
 
 const auth = getAuth();
 let products = [];
@@ -231,7 +232,7 @@ async function refreshStats() {
   }
 }
 
-document.getElementById("applyFilterBtn")?.addEventListener("click", refreshStats);
+bindActionButton(document.getElementById("applyFilterBtn"), refreshStats);
 
 onAuthStateChanged(auth, async user => {
   if (!user) {

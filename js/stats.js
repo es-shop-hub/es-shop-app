@@ -14,6 +14,7 @@ import {
 } from "./firebase.js";
 import { auth, onAuthStateChanged } from "./auth.js";
 import { getAppConfig } from "./appConfig.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 export const $ = id => document.getElementById(id);
 export const n = v => Number(v) || 0;
@@ -99,11 +100,11 @@ function bindEvents() {
     updateDateLimits();
   });
 
-  $("applyFiltersBtn")?.addEventListener("click", async () => {
+  bindActionButton($("applyFiltersBtn"), async () => {
     await loadData();
   });
 
-  $("refreshBtn")?.addEventListener("click", async () => {
+  bindActionButton($("refreshBtn"), async () => {
     await loadData();
   });
 

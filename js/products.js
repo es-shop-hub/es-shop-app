@@ -21,6 +21,7 @@ import {
   formatExpirationDate,
   buildBatchId
 } from "./expiration.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const PURCHASE_TYPE_TO_CATEGORY = {
   Investissement: "investment",
@@ -678,9 +679,7 @@ tdState.className = p.isActive
 deleteBtn.className = "btn btn-delete";
 deleteBtn.textContent = "Supprimer";
 
-deleteBtn.addEventListener("click", () => {
-  deleteProduct(p.id, p.name);
-});
+bindActionButton(deleteBtn, () => deleteProduct(p.id, p.name));
     
     if (p.isActive) {
   activateBtn.className = "btn btn-add";
@@ -694,9 +693,7 @@ deleteBtn.addEventListener("click", () => {
       openProductModal("edit", p);
     });
 
-    activateBtn.addEventListener("click", () => {
-  toggleProductStatus(p.id, p.name, p.isActive);
-});
+    bindActionButton(activateBtn, () => toggleProductStatus(p.id, p.name, p.isActive));
 
     tdActions.append(editBtn, activateBtn, deleteBtn);
 
@@ -762,9 +759,7 @@ addBtn.addEventListener("click", () => {
   openProductModal("add");
 });
 
-document.getElementById("productSaveBtn")?.addEventListener("click", () => {
-  saveProductFromModal();
-});
+bindActionButton(document.getElementById("productSaveBtn"), () => saveProductFromModal());
 
 document.getElementById("productCancelBtn")?.addEventListener("click", () => {
   closeProductModal();

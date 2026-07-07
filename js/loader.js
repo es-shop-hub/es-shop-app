@@ -5,6 +5,7 @@ import { getAuth, onAuthStateChanged } from "./auth.js";
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 import html2canvas from "https://esm.sh/html2canvas@1.4.1";
 import { getAppConfig } from "./appConfig.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const el = (id) => document.getElementById(id);
 const n = (v) => Number(v) || 0;
@@ -318,7 +319,7 @@ function formatDate() {
   });
 }
 
-pdfBtnEl?.addEventListener("click", async () => {
+bindActionButton(pdfBtnEl, async () => {
     
     if (currentUser?.role !== "admin") {
     alert("Accès refusé");

@@ -38,6 +38,7 @@ import {
   isAppInBackground
 } from "./finance/notifications.js";
 import { showToast } from "./finance/toast.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 let currentUserId = null;
@@ -310,7 +311,7 @@ async function submitLossCorrection() {
   }
 }
 
-document.getElementById("submitProductLoss")?.addEventListener("click", async () => {
+bindActionButton(document.getElementById("submitProductLoss"), async () => {
   try {
     const productId = document.getElementById("productSelect")?.value;
     const qtyLost = Number(document.getElementById("productQuantityLost")?.value);
@@ -408,7 +409,7 @@ document.getElementById("submitProductLoss")?.addEventListener("click", async ()
   }
 });
 
-document.getElementById("submitMoneyLoss")?.addEventListener("click", async () => {
+bindActionButton(document.getElementById("submitMoneyLoss"), async () => {
   const amount = Number(document.getElementById("moneyLostAmount")?.value);
   const reason = document.getElementById("moneyLossReason")?.value;
 
@@ -460,7 +461,7 @@ document.getElementById("submitMoneyLoss")?.addEventListener("click", async () =
 });
 
 document.getElementById("applyFirebaseFilter")?.addEventListener("click", () => loadData(true));
-document.getElementById("lossCorrectionSaveBtn")?.addEventListener("click", submitLossCorrection);
+bindActionButton(document.getElementById("lossCorrectionSaveBtn"), submitLossCorrection);
 document.getElementById("lossCorrectionCancelBtn")?.addEventListener("click", () => {
   closeActionModal(lossCorrectionModal, document.getElementById("lossCorrectionError"));
 });
