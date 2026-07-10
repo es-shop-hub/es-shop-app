@@ -16,11 +16,11 @@ import { bindActionButton } from "./utils/buttonManager.js";
 const MAX_ITEMS = 10;
 
 const containers = {
-  ca: document.getElementById("caProducts"),
+  mostSold: document.getElementById("mostSoldProducts"),
   profit: document.getElementById("profitProducts"),
-  lowQty: document.getElementById("lowQtyProducts"),
-  top: document.getElementById("topProducts"),
-  low: document.getElementById("lowProducts")
+  ca: document.getElementById("caProducts"),
+  leastSold: document.getElementById("leastSoldProducts"),
+  lowStock: document.getElementById("lowStockProducts")
 };
 
 const periodFilter = document.getElementById("periodFilter");
@@ -28,36 +28,28 @@ const applyPeriodBtn = document.getElementById("applyPeriodBtn");
 const statusMsg = document.getElementById("statusMsg");
 
 const kpiEls = {
-  caValue: document.getElementById("kpiCaValue"),
-  caName: document.getElementById("kpiCaName"),
+  salesValue: document.getElementById("kpiSalesValue"),
+  salesName: document.getElementById("kpiSalesName"),
   profitValue: document.getElementById("kpiProfitValue"),
   profitName: document.getElementById("kpiProfitName"),
-  lowQtyValue: document.getElementById("kpiLowQtyValue"),
-  lowQtyName: document.getElementById("kpiLowQtyName")
+  stockValue: document.getElementById("kpiStockValue"),
+  stockName: document.getElementById("kpiStockName")
 };
 
 const auth = getAuth();
 let currencySymbol = "$";
 let currentUserId = null;
+let lowStockLimit = 5;
 
 async function checkUser(uid) {
   if (!uid) throw new Error("UID invalide");
 
   const userSnap = await getDoc(doc(db, "users", uid));
-
-  if (!userSnap.exists()) {
-    throw new Error("Utilisateur introuvable");
-  }
+  if (!userSnap.exists()) throw new Error("Utilisateur introuvable");
 
   const userData = userSnap.data();
-
-  if (!userData?.isActive) {
-    throw new Error("Compte désactivé");
-  }
-
-  if (userData.role !== "admin") {
-    throw new Error("Accès refusé");
-  }
+  if (!userData?.isActive) throw new Error("Compte désactivé");
+  if (userData.role !== "admin") throw new Error("Accès refusé");
 
   return userData;
 }
@@ -78,13 +70,19 @@ function formatMoney(value) {
   })}`;
 }
 
+function formatPercent(value) {
+  return `${round2(value).toLocaleString("fr-FR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  })} %`;
+}
+
 function setStatus(text) {
   if (statusMsg) statusMsg.textContent = text || "";
 }
 
 function showEmpty(container, text) {
   if (!container) return;
-
   container.replaceChildren();
 
   const div = document.createElement("div");
@@ -95,15 +93,8 @@ function showEmpty(container, text) {
 
 function getPeriodStart(period) {
   const now = new Date();
-
-  if (period === "7d") {
-    return new Date(now.getTime() - 7 * 86400000);
-  }
-
-  if (period === "30d") {
-    return new Date(now.getTime() - 30 * 86400000);
-  }
-
+  if (period === "7d") return new Date(now.getTime() - 7 * 86400000);
+  if (period === "30d") return new Date(now.getTime() - 30 * 86400000);
   return null;
 }
 
@@ -113,16 +104,203 @@ function getPeriodLabel(period) {
   return "Toute la période";
 }
 
+function getStockThreshold(product) {
+  const alert = Number(product?.stock_alert);
+  if (Number.isFinite(alert) && alert > 0) return alert;
+  return lowStockLimit;
+}
+
+function getStockLevel(stockCurrent, threshold) {
+  if (stockCurrent <= 0) return "critical";
+  if (stockCurrent <= threshold) return "low";
+  return "ok";
+}
+
+function getStockLabel(level) {
+  if (level === "critical") return "Stock critique";
+  if (level === "low") return "Stock faible";
+  return "Stock OK";
+}
+
+/**
+ * Agrège sale_items pour les ventes actives uniquement.
+ * CA = Σ (price × quantity)
+ * Bénéfice = Σ profit (champ Firestore, déjà (prix vente − prix achat) × qté)
+ */
+function buildSalesRanking(productsMap, saleItems, activeSaleIds) {
+  const statsMap = new Map();
+  let totalQuantity = 0;
+
+  saleItems.forEach(item => {
+    const saleId = item.saleId;
+    const productId = item.productId;
+
+    if (!productId) return;
+    if (saleId && activeSaleIds && !activeSaleIds.has(saleId)) return;
+
+    const quantity = Number(item.quantity) || 0;
+    const unitPrice = Number(item.price) || 0;
+
+    if (quantity <= 0) return;
+
+    const lineRevenue = round2(unitPrice * quantity);
+    const lineProfit = Number.isFinite(Number(item.profit))
+      ? round2(Number(item.profit))
+      : 0;
+
+    totalQuantity += quantity;
+
+    if (!statsMap.has(productId)) {
+      statsMap.set(productId, {
+        productId,
+        quantity: 0,
+        revenue: 0,
+        profit: 0
+      });
+    }
+
+    const entry = statsMap.get(productId);
+    entry.quantity += quantity;
+    entry.revenue = round2(entry.revenue + lineRevenue);
+    entry.profit = round2(entry.profit + lineProfit);
+  });
+
+  const ranking = [];
+
+  statsMap.forEach((stats, productId) => {
+    const product = productsMap.get(productId);
+    if (!product || product.isActive === false) return;
+
+    const stockCurrent = Number(product.stock_current) || 0;
+    const stockThreshold = getStockThreshold(product);
+    const stockLevel = getStockLevel(stockCurrent, stockThreshold);
+
+    const marginRate = stats.revenue > 0
+      ? round2((stats.profit / stats.revenue) * 100)
+      : 0;
+
+    const profitPerUnit = stats.quantity > 0
+      ? round2(stats.profit / stats.quantity)
+      : 0;
+
+    const avgPrice = stats.quantity > 0
+      ? round2(stats.revenue / stats.quantity)
+      : 0;
+
+    const salesShare = totalQuantity > 0
+      ? round2((stats.quantity / totalQuantity) * 100)
+      : 0;
+
+    ranking.push({
+      productId,
+      name: sanitizeText(product.name || "Produit inconnu"),
+      quantity: stats.quantity,
+      revenue: stats.revenue,
+      profit: stats.profit,
+      marginRate,
+      profitPerUnit,
+      avgPrice,
+      salesShare,
+      stockCurrent,
+      stockThreshold,
+      stockLevel
+    });
+  });
+
+  return { ranking, totalQuantity };
+}
+
+function buildLowStockList(productsMap, salesByProductId) {
+  const list = [];
+
+  productsMap.forEach((product, productId) => {
+    if (product.isActive === false) return;
+
+    const stockCurrent = Number(product.stock_current) || 0;
+    const stockThreshold = getStockThreshold(product);
+    const stockLevel = getStockLevel(stockCurrent, stockThreshold);
+
+    if (stockLevel === "ok") return;
+
+    const sales = salesByProductId.get(productId);
+
+    list.push({
+      productId,
+      name: sanitizeText(product.name || "Produit inconnu"),
+      stockCurrent,
+      stockThreshold,
+      stockLevel,
+      quantity: sales?.quantity || 0,
+      revenue: sales?.revenue || 0,
+      profit: sales?.profit || 0,
+      marginRate: sales?.marginRate || 0,
+      avgPrice: sales?.avgPrice || 0,
+      salesShare: sales?.salesShare || 0,
+      profitPerUnit: sales?.profitPerUnit || 0
+    });
+  });
+
+  return list.sort((a, b) => {
+    if (a.stockCurrent !== b.stockCurrent) return a.stockCurrent - b.stockCurrent;
+    return a.stockThreshold - b.stockThreshold;
+  });
+}
+
+function sortByQuantityDesc(items) {
+  return [...items].sort((a, b) => {
+    if (b.quantity !== a.quantity) return b.quantity - a.quantity;
+    return b.revenue - a.revenue;
+  });
+}
+
+function sortByQuantityAsc(items) {
+  return [...items].sort((a, b) => {
+    if (a.quantity !== b.quantity) return a.quantity - b.quantity;
+    return a.revenue - b.revenue;
+  });
+}
+
+function sortByProfitMargin(items) {
+  return [...items]
+    .filter(item => item.revenue > 0)
+    .sort((a, b) => {
+      if (b.marginRate !== a.marginRate) return b.marginRate - a.marginRate;
+      if (b.profit !== a.profit) return b.profit - a.profit;
+      return b.quantity - a.quantity;
+    });
+}
+
+function sortByRevenue(items) {
+  return [...items].sort((a, b) => {
+    if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+    return b.quantity - a.quantity;
+  });
+}
+
 function createProgressBar(percent, type) {
   const progress = document.createElement("div");
   progress.className = "progress";
 
   const fill = document.createElement("div");
   fill.className = `progress-fill ${type}`;
-  fill.style.width = `${Math.min(Number(percent) || 0, 100)}%`;
+  fill.style.width = `${Math.min(Math.max(Number(percent) || 0, 0), 100)}%`;
 
   progress.appendChild(fill);
   return progress;
+}
+
+function createStatLine(label, value) {
+  const line = document.createElement("div");
+  line.className = "stat-line";
+
+  const l = document.createElement("span");
+  l.textContent = label;
+
+  const v = document.createElement("strong");
+  v.textContent = value;
+
+  line.append(l, v);
+  return line;
 }
 
 function createCard(item, options = {}) {
@@ -132,40 +310,43 @@ function createCard(item, options = {}) {
     position = 1,
     lines = [],
     percent = 0,
-    progressType = type
+    progressType = type,
+    stockFlag = null
   } = options;
 
-  const card = document.createElement("div");
+  const card = document.createElement("article");
   card.className = `rank-card ${type}`;
 
   const top = document.createElement("div");
   top.className = "card-top";
 
+  const nameWrap = document.createElement("div");
+  nameWrap.style.flex = "1";
+  nameWrap.style.minWidth = "0";
+
   const name = document.createElement("div");
   name.className = "product-name";
-  name.textContent = sanitizeText(item.name);
+  name.textContent = item.name;
+
+  nameWrap.appendChild(name);
+
+  if (stockFlag) {
+    const flag = document.createElement("span");
+    flag.className = `stock-flag ${stockFlag}`;
+    flag.textContent = stockFlag === "critical" ? "Stock critique" : "Stock faible";
+    nameWrap.appendChild(flag);
+  }
 
   const badge = document.createElement("div");
   badge.className = `rank-badge ${badgeType}`;
   badge.textContent = `#${position}`;
 
-  top.append(name, badge);
+  top.append(nameWrap, badge);
 
   const stats = document.createElement("div");
   stats.className = "card-stats";
-
   lines.forEach(([label, value]) => {
-    const line = document.createElement("div");
-    line.className = "stat-line";
-
-    const l = document.createElement("span");
-    l.textContent = label;
-
-    const v = document.createElement("strong");
-    v.textContent = value;
-
-    line.append(l, v);
-    stats.appendChild(line);
+    stats.appendChild(createStatLine(label, value));
   });
 
   card.append(top, stats);
@@ -177,80 +358,6 @@ function createCard(item, options = {}) {
   return card;
 }
 
-function buildProductStats(productsMap, saleItems, activeSaleIds) {
-  const map = new Map();
-  let totalSold = 0;
-  let totalRevenue = 0;
-
-  saleItems.forEach(item => {
-    const saleId = item.saleId;
-    const productId = item.productId;
-
-    if (!productId) return;
-    if (saleId && activeSaleIds && !activeSaleIds.has(saleId)) return;
-
-    const quantity = Number(item.quantity || 0);
-    const price = Number(item.price || 0);
-    const profit = Number(item.profit ?? (price * quantity));
-
-    if (quantity <= 0) return;
-
-    totalSold += quantity;
-    totalRevenue += price * quantity;
-
-    if (!map.has(productId)) {
-      map.set(productId, {
-        productId,
-        quantity: 0,
-        revenue: 0,
-        profit: 0,
-        unitPrices: []
-      });
-    }
-
-    const entry = map.get(productId);
-    entry.quantity += quantity;
-    entry.revenue += price * quantity;
-    entry.profit += profit;
-    entry.unitPrices.push(price);
-  });
-
-  const ranking = Array.from(map.entries()).map(([productId, stats]) => {
-    const product = productsMap.get(productId);
-
-    if (!product || product.isActive === false) {
-      return null;
-    }
-
-    const avgPrice = stats.quantity
-      ? stats.revenue / stats.quantity
-      : 0;
-
-    const maxQuantity = Math.max(...Array.from(map.values()).map(v => v.quantity), 0);
-    const ratio = maxQuantity > 0 ? stats.quantity / maxQuantity : 0;
-
-    let score = Math.pow(ratio, 2.2) * 9.8;
-    if (score > 0 && score < 1) score = 1;
-
-    const percent = totalSold
-      ? (stats.quantity / totalSold) * 100
-      : 0;
-
-    return {
-      productId,
-      name: sanitizeText(product.name || "Produit inconnu"),
-      quantity: stats.quantity,
-      revenue: round2(stats.revenue),
-      profit: round2(stats.profit),
-      avgPrice: round2(avgPrice),
-      percent: round2(percent),
-      score: round2(Math.min(score, 9.8))
-    };
-  }).filter(Boolean);
-
-  return { ranking, totalSold, totalRevenue };
-}
-
 function renderList(container, items, builder, emptyText) {
   if (!container) return;
 
@@ -259,69 +366,119 @@ function renderList(container, items, builder, emptyText) {
     return;
   }
 
-  container.replaceChildren(
-    ...items.map((item, index) => builder(item, index))
-  );
+  const fragment = document.createDocumentFragment();
+  items.forEach((item, index) => {
+    fragment.appendChild(builder(item, index));
+  });
+  container.replaceChildren(fragment);
 }
 
-function updateKpi(els, valueText, nameText) {
-  if (els.value) els.value.textContent = valueText;
-  if (els.name) els.name.textContent = nameText;
+function updateKpi(valueEl, nameEl, valueText, nameText) {
+  if (valueEl) valueEl.textContent = valueText;
+  if (nameEl) nameEl.textContent = nameText;
 }
 
-function renderRanking(ranking, period) {
-  if (!ranking.length) {
+function renderRanking(ranking, lowStockList, period) {
+  const hasSales = ranking.length > 0;
+  const hasLowStock = lowStockList.length > 0;
+
+  if (!hasSales && !hasLowStock) {
     Object.values(containers).forEach(container => {
-      showEmpty(container, "Aucune vente sur cette période");
+      showEmpty(container, "Aucune donnée sur cette période");
     });
 
-    updateKpi(
-      { value: kpiEls.caValue, name: kpiEls.caName },
-      "—",
-      "Aucune donnée"
-    );
-    updateKpi(
-      { value: kpiEls.profitValue, name: kpiEls.profitName },
-      "—",
-      "Aucune donnée"
-    );
-    updateKpi(
-      { value: kpiEls.lowQtyValue, name: kpiEls.lowQtyName },
-      "—",
-      "Aucune donnée"
-    );
+    updateKpi(kpiEls.salesValue, kpiEls.salesName, "—", "Aucune donnée");
+    updateKpi(kpiEls.profitValue, kpiEls.profitName, "—", "Aucune donnée");
+    updateKpi(kpiEls.stockValue, kpiEls.stockName, "—", "Aucune donnée");
 
-    setStatus(`Période : ${getPeriodLabel(period)} — aucune vente`);
+    setStatus(`Période : ${getPeriodLabel(period)} — aucune vente ni alerte stock`);
     return;
   }
 
-  const byRevenue = [...ranking].sort((a, b) => b.revenue - a.revenue);
-  const byProfit = [...ranking].sort((a, b) => b.profit - a.profit);
-  const byQuantityDesc = [...ranking].sort((a, b) => b.quantity - a.quantity);
-  const byQuantityAsc = [...ranking].sort((a, b) => a.quantity - b.quantity);
+  const byQuantityDesc = sortByQuantityDesc(ranking);
+  const byQuantityAsc = sortByQuantityAsc(ranking);
+  const byProfitMargin = sortByProfitMargin(ranking);
+  const byRevenue = sortByRevenue(ranking);
 
-  const maxRevenue = byRevenue[0]?.revenue || 1;
-  const maxProfit = byProfit[0]?.profit || 1;
   const maxQty = byQuantityDesc[0]?.quantity || 1;
+  const maxProfit = byProfitMargin[0]?.profit || 1;
+  const maxRevenue = byRevenue[0]?.revenue || 1;
 
-  const topCa = byRevenue[0];
-  const topProfit = byProfit[0];
-  const lowestQty = byQuantityAsc[0];
+  if (hasSales) {
+    const topSold = byQuantityDesc[0];
+    updateKpi(
+      kpiEls.salesValue,
+      kpiEls.salesName,
+      `${topSold.quantity} unités`,
+      topSold.name
+    );
 
-  updateKpi(
-    { value: kpiEls.caValue, name: kpiEls.caName },
-    formatMoney(topCa.revenue),
-    topCa.name
+    const topMargin = byProfitMargin[0];
+    updateKpi(
+      kpiEls.profitValue,
+      kpiEls.profitName,
+      formatPercent(topMargin.marginRate),
+      `${topMargin.name} (${formatMoney(topMargin.profit)})`
+    );
+  } else {
+    updateKpi(kpiEls.salesValue, kpiEls.salesName, "—", "Aucune vente");
+    updateKpi(kpiEls.profitValue, kpiEls.profitName, "—", "Aucune vente");
+  }
+
+  if (hasLowStock) {
+    const critical = lowStockList[0];
+    updateKpi(
+      kpiEls.stockValue,
+      kpiEls.stockName,
+      `${critical.stockCurrent} restant(s)`,
+      critical.name
+    );
+  } else {
+    updateKpi(kpiEls.stockValue, kpiEls.stockName, "—", "Stock suffisant");
+  }
+
+  renderList(
+    containers.mostSold,
+    byQuantityDesc.slice(0, MAX_ITEMS),
+    (item, index) => createCard(item, {
+      type: "gold",
+      badgeType: "best",
+      position: index + 1,
+      percent: maxQty ? (item.quantity / maxQty) * 100 : 0,
+      progressType: "gold",
+      stockFlag: item.stockLevel !== "ok" ? item.stockLevel : null,
+      lines: [
+        ["Quantité vendue", String(item.quantity)],
+        ["CA", formatMoney(item.revenue)],
+        ["Bénéfice", formatMoney(item.profit)],
+        ["Marge", formatPercent(item.marginRate)],
+        ["Stock actuel", String(item.stockCurrent)],
+        ["Part des ventes", formatPercent(item.salesShare)]
+      ]
+    }),
+    "Aucune vente sur cette période"
   );
-  updateKpi(
-    { value: kpiEls.profitValue, name: kpiEls.profitName },
-    formatMoney(topProfit.profit),
-    topProfit.name
-  );
-  updateKpi(
-    { value: kpiEls.lowQtyValue, name: kpiEls.lowQtyName },
-    String(lowestQty.quantity),
-    lowestQty.name
+
+  renderList(
+    containers.profit,
+    byProfitMargin.slice(0, MAX_ITEMS),
+    (item, index) => createCard(item, {
+      type: "green",
+      badgeType: "green",
+      position: index + 1,
+      percent: maxProfit ? (item.profit / maxProfit) * 100 : 0,
+      progressType: "green",
+      stockFlag: item.stockLevel !== "ok" ? item.stockLevel : null,
+      lines: [
+        ["Marge", formatPercent(item.marginRate)],
+        ["Bénéfice total", formatMoney(item.profit)],
+        ["Bénéfice / unité", formatMoney(item.profitPerUnit)],
+        ["CA", formatMoney(item.revenue)],
+        ["Quantité", String(item.quantity)],
+        ["Stock", String(item.stockCurrent)]
+      ]
+    }),
+    "Aucun produit avec marge calculable"
   );
 
   renderList(
@@ -331,98 +488,74 @@ function renderRanking(ranking, period) {
       type: "blue",
       badgeType: "blue",
       position: index + 1,
-      percent: (item.revenue / maxRevenue) * 100,
+      percent: maxRevenue ? (item.revenue / maxRevenue) * 100 : 0,
       progressType: "blue",
+      stockFlag: item.stockLevel !== "ok" ? item.stockLevel : null,
       lines: [
         ["CA", formatMoney(item.revenue)],
         ["Prix moyen", formatMoney(item.avgPrice)],
-        ["Quantité", String(item.quantity)]
+        ["Quantité", String(item.quantity)],
+        ["Bénéfice", formatMoney(item.profit)],
+        ["Marge", formatPercent(item.marginRate)],
+        ["Stock", String(item.stockCurrent)]
       ]
     }),
     "Aucun produit avec CA"
   );
 
-  renderList(
-    containers.profit,
-    byProfit.slice(0, MAX_ITEMS),
-    (item, index) => createCard(item, {
-      type: "green",
-      badgeType: "green",
-      position: index + 1,
-      percent: (item.profit / maxProfit) * 100,
-      progressType: "green",
-      lines: [
-        ["Bénéfice", formatMoney(item.profit)],
-        ["CA", formatMoney(item.revenue)],
-        ["Quantité", String(item.quantity)]
-      ]
-    }),
-    "Aucun produit avec bénéfice"
-  );
+  const leastSoldPool = byQuantityAsc.filter(item => item.quantity > 0);
+  const mostSoldIds = new Set(byQuantityDesc.slice(0, MAX_ITEMS).map(i => i.productId));
 
   renderList(
-    containers.lowQty,
-    byQuantityAsc.slice(0, MAX_ITEMS),
+    containers.leastSold,
+    leastSoldPool
+      .filter(item => !mostSoldIds.has(item.productId))
+      .slice(0, MAX_ITEMS),
     (item, index) => createCard(item, {
       type: "orange",
       badgeType: "orange",
       position: index + 1,
       percent: maxQty ? (item.quantity / maxQty) * 100 : 0,
       progressType: "orange",
+      stockFlag: item.stockLevel !== "ok" ? item.stockLevel : null,
       lines: [
         ["Quantité", String(item.quantity)],
         ["CA", formatMoney(item.revenue)],
-        ["Part ventes", `${item.percent}%`]
+        ["Bénéfice", formatMoney(item.profit)],
+        ["Marge", formatPercent(item.marginRate)],
+        ["Stock", String(item.stockCurrent)],
+        ["Seuil alerte", String(item.stockThreshold)]
       ]
     }),
-    "Aucun produit faible"
-  );
-
-  const topTen = byQuantityDesc.slice(0, MAX_ITEMS);
-  const topIds = new Set(topTen.map(item => item.productId));
-
-  const lowTen = byQuantityAsc
-    .filter(item => !topIds.has(item.productId))
-    .slice(0, MAX_ITEMS);
-
-  renderList(
-    containers.top,
-    topTen,
-    (item, index) => createCard(item, {
-      type: "gold",
-      badgeType: "best",
-      position: index + 1,
-      percent: item.percent,
-      progressType: "gold",
-      lines: [
-        ["Ventes", String(item.quantity)],
-        ["CA", formatMoney(item.revenue)],
-        ["Cote", `${item.score}/10`]
-      ]
-    }),
-    "Top indisponible"
+    "Aucun produit peu vendu distinct"
   );
 
   renderList(
-    containers.low,
-    lowTen,
+    containers.lowStock,
+    lowStockList.slice(0, MAX_ITEMS),
     (item, index) => createCard(item, {
-      type: "low",
-      badgeType: "low",
+      type: item.stockLevel === "critical" ? "stock-critical" : "stock-low",
+      badgeType: item.stockLevel === "critical" ? "stock-critical" : "stock-low",
       position: index + 1,
-      percent: item.percent,
+      percent: item.stockThreshold > 0
+        ? Math.min((item.stockCurrent / item.stockThreshold) * 100, 100)
+        : 0,
       progressType: "red",
+      stockFlag: item.stockLevel,
       lines: [
-        ["Ventes", String(item.quantity)],
-        ["CA", formatMoney(item.revenue)],
-        ["Cote", `${item.score}/10`]
+        ["Stock actuel", String(item.stockCurrent)],
+        ["Seuil alerte", String(item.stockThreshold)],
+        ["Niveau", getStockLabel(item.stockLevel)],
+        ["Ventes période", String(item.quantity)],
+        ["CA période", formatMoney(item.revenue)],
+        ["Bénéfice période", formatMoney(item.profit)]
       ]
     }),
-    "Classement faible indisponible"
+    "Aucun produit en stock faible ou critique"
   );
 
   setStatus(
-    `Période : ${getPeriodLabel(period)} — ${ranking.length} produit(s) vendu(s)`
+    `Période : ${getPeriodLabel(period)} — ${ranking.length} produit(s) vendu(s), ${lowStockList.length} alerte(s) stock`
   );
 }
 
@@ -437,17 +570,11 @@ async function loadRanking() {
   setStatus("Chargement...");
 
   const salesQuery = periodStart
-    ? query(
-        collection(db, "sales"),
-        where("createdAt", ">=", periodStart)
-      )
+    ? query(collection(db, "sales"), where("createdAt", ">=", periodStart))
     : collection(db, "sales");
 
   const saleItemsQuery = periodStart
-    ? query(
-        collection(db, "sale_items"),
-        where("createdAt", ">=", periodStart)
-      )
+    ? query(collection(db, "sale_items"), where("createdAt", ">=", periodStart))
     : collection(db, "sale_items");
 
   const [salesSnap, saleItemsSnap, productsSnap] = await Promise.all([
@@ -457,7 +584,6 @@ async function loadRanking() {
   ]);
 
   const activeSaleIds = new Set();
-
   salesSnap.forEach(docSnap => {
     const data = docSnap.data();
     if (data?.status !== "cancelled") {
@@ -466,7 +592,6 @@ async function loadRanking() {
   });
 
   const productsMap = new Map();
-
   productsSnap.forEach(docSnap => {
     const data = docSnap.data();
     if (data?.isActive !== false) {
@@ -475,16 +600,20 @@ async function loadRanking() {
   });
 
   const saleItems = saleItemsSnap.docs.map(docSnap => docSnap.data());
-  const { ranking } = buildProductStats(productsMap, saleItems, activeSaleIds);
+  const { ranking } = buildSalesRanking(productsMap, saleItems, activeSaleIds);
 
-  renderRanking(ranking, period);
+  const salesByProductId = new Map(ranking.map(item => [item.productId, item]));
+  const lowStockList = buildLowStockList(productsMap, salesByProductId);
+
+  renderRanking(ranking, lowStockList, period);
 
   if (currentUserId) {
     await writeLog({
       action: "view_ranking",
       userId: currentUserId,
       period,
-      productsCount: ranking.length
+      productsCount: ranking.length,
+      lowStockCount: lowStockList.length
     });
   }
 }
@@ -511,6 +640,7 @@ onAuthStateChanged(auth, async user => {
 
     const config = await getAppConfig();
     currencySymbol = config?.currencySymbol || "$";
+    lowStockLimit = Number(config?.lowStockLimit) || 5;
 
     await loadRanking();
   } catch (err) {

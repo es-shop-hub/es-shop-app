@@ -46,6 +46,7 @@ body{
 .header p{
   color:#aaa;
   font-size:13px;
+  line-height:1.5;
 }
 
 .toolbar{
@@ -105,17 +106,9 @@ body{
   border:1px solid rgba(255,255,255,0.06);
 }
 
-.kpi-card.ca{
-  border-color:rgba(52,152,219,0.35);
-}
-
-.kpi-card.profit{
-  border-color:rgba(46,204,113,0.35);
-}
-
-.kpi-card.lowqty{
-  border-color:rgba(231,76,60,0.35);
-}
+.kpi-card.sales{border-color:rgba(255,215,0,0.35);}
+.kpi-card.profit{border-color:rgba(46,204,113,0.35);}
+.kpi-card.stock{border-color:rgba(231,76,60,0.35);}
 
 .kpi-label{
   font-size:11px;
@@ -145,13 +138,22 @@ body{
 
 .section-title{
   display:flex;
-  align-items:center;
+  align-items:flex-start;
   justify-content:space-between;
+  gap:10px;
   margin-bottom:14px;
 }
 
 .section-title h2{
   font-size:18px;
+  line-height:1.3;
+}
+
+.section-title p{
+  font-size:12px;
+  color:#888;
+  margin-top:4px;
+  line-height:1.4;
 }
 
 .rank-grid{
@@ -161,8 +163,6 @@ body{
 }
 
 .rank-card{
-  position:relative;
-  overflow:hidden;
   background:#151515;
   border-radius:18px;
   padding:16px;
@@ -177,12 +177,7 @@ body{
 .rank-card.gold{
   background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,255,255,0.04));
   border:1px solid rgba(255,215,0,0.4);
-  box-shadow:0 0 20px rgba(255,215,0,0.15);
-}
-
-.rank-card.blue{
-  background:linear-gradient(135deg,rgba(52,152,219,0.12),rgba(255,255,255,0.03));
-  border:1px solid rgba(52,152,219,0.28);
+  box-shadow:0 0 20px rgba(255,215,0,0.12);
 }
 
 .rank-card.green{
@@ -190,33 +185,46 @@ body{
   border:1px solid rgba(46,204,113,0.28);
 }
 
+.rank-card.blue{
+  background:linear-gradient(135deg,rgba(52,152,219,0.12),rgba(255,255,255,0.03));
+  border:1px solid rgba(52,152,219,0.28);
+}
+
 .rank-card.orange{
   background:linear-gradient(135deg,rgba(230,126,34,0.12),rgba(255,255,255,0.03));
   border:1px solid rgba(230,126,34,0.28);
 }
 
-.rank-card.low{
-  background:linear-gradient(135deg,rgba(255,0,0,0.10),rgba(255,255,255,0.03));
-  border:1px solid rgba(255,0,0,0.18);
+.rank-card.stock-low{
+  background:linear-gradient(135deg,rgba(230,126,34,0.14),rgba(255,255,255,0.03));
+  border:1px solid rgba(230,126,34,0.45);
+}
+
+.rank-card.stock-critical{
+  background:linear-gradient(135deg,rgba(255,0,0,0.14),rgba(255,255,255,0.03));
+  border:1px solid rgba(255,77,77,0.45);
+  box-shadow:0 0 16px rgba(255,77,77,0.12);
 }
 
 .card-top{
   display:flex;
   justify-content:space-between;
-  align-items:center;
-  margin-bottom:10px;
+  align-items:flex-start;
   gap:10px;
+  margin-bottom:10px;
 }
 
 .product-name{
   font-size:16px;
   font-weight:700;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
+  line-height:1.35;
+  word-break:break-word;
+  flex:1;
+  min-width:0;
 }
 
 .rank-badge{
+  flex-shrink:0;
   min-width:48px;
   padding:5px 8px;
   border-radius:999px;
@@ -226,28 +234,53 @@ body{
 }
 
 .rank-badge.best{background:rgba(255,215,0,0.14);color:#ffd700;}
-.rank-badge.blue{background:rgba(52,152,219,0.14);color:#5dade2;}
 .rank-badge.green{background:rgba(46,204,113,0.14);color:#58d68d;}
+.rank-badge.blue{background:rgba(52,152,219,0.14);color:#5dade2;}
 .rank-badge.orange{background:rgba(230,126,34,0.14);color:#f5b041;}
-.rank-badge.low{background:rgba(255,0,0,0.14);color:#ff6b6b;}
+.rank-badge.stock-low{background:rgba(230,126,34,0.18);color:#f5b041;}
+.rank-badge.stock-critical{background:rgba(255,0,0,0.18);color:#ff6b6b;}
+
+.stock-flag{
+  display:inline-block;
+  margin-top:6px;
+  padding:3px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+}
+
+.stock-flag.low{background:rgba(230,126,34,0.2);color:#f5b041;}
+.stock-flag.critical{background:rgba(255,0,0,0.2);color:#ff6b6b;}
 
 .card-stats{
-  display:flex;
-  flex-direction:column;
-  gap:7px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px 12px;
 }
 
 .stat-line{
   display:flex;
-  justify-content:space-between;
-  align-items:center;
-  font-size:13px;
+  flex-direction:column;
+  gap:2px;
+  font-size:12px;
+  min-width:0;
+}
+
+.stat-line span{
+  color:#888;
+  font-size:11px;
+}
+
+.stat-line strong{
+  font-size:14px;
+  color:#fff;
+  word-break:break-word;
 }
 
 .progress{
   margin-top:12px;
   width:100%;
-  height:12px;
+  height:10px;
   border-radius:999px;
   overflow:hidden;
   background:rgba(255,255,255,0.05);
@@ -260,8 +293,8 @@ body{
 }
 
 .progress-fill.gold{background:linear-gradient(90deg,#b8860b,#ffd700,#fff1a8);}
-.progress-fill.blue{background:linear-gradient(90deg,#1a5276,#3498db);}
 .progress-fill.green{background:linear-gradient(90deg,#1e8449,#2ecc71);}
+.progress-fill.blue{background:linear-gradient(90deg,#1a5276,#3498db);}
 .progress-fill.orange{background:linear-gradient(90deg,#a04000,#e67e22);}
 .progress-fill.red{background:linear-gradient(90deg,#8b0000,#ff4d4d);}
 
@@ -271,6 +304,8 @@ body{
   padding:30px 15px;
   background:#151515;
   border-radius:16px;
+  font-size:13px;
+  line-height:1.5;
 }
 
 #statusMsg{
@@ -305,7 +340,6 @@ nav .nav-item{
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  transition:.2s;
 }
 
 nav .nav-item.active{
@@ -313,13 +347,19 @@ nav .nav-item.active{
   color:#D4AF37;
   font-weight:bold;
 }
+
+@media (min-width:640px){
+  .card-stats{
+    grid-template-columns:repeat(3,1fr);
+  }
+}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>🏆 StockFlow Ranking</h1>
-  <p>Classement des produits par CA, bénéfice et quantités vendues.</p>
+  <p>Classement par volume de ventes, rentabilité (marge), chiffre d'affaires et niveau de stock — données issues de <strong>sale_items</strong> et <strong>products</strong>.</p>
 </div>
 
 <div class="toolbar">
@@ -336,56 +376,71 @@ nav .nav-item.active{
 <p id="statusMsg" aria-live="polite"></p>
 
 <div class="kpi-row">
-  <div class="kpi-card ca">
-    <div class="kpi-label">Meilleur CA</div>
-    <div class="kpi-value" id="kpiCaValue">—</div>
-    <div class="kpi-sub" id="kpiCaName">Aucune donnée</div>
+  <div class="kpi-card sales">
+    <div class="kpi-label">Plus vendu</div>
+    <div class="kpi-value" id="kpiSalesValue">—</div>
+    <div class="kpi-sub" id="kpiSalesName">Aucune donnée</div>
   </div>
   <div class="kpi-card profit">
-    <div class="kpi-label">Meilleur bénéfice</div>
+    <div class="kpi-label">Meilleure marge</div>
     <div class="kpi-value" id="kpiProfitValue">—</div>
     <div class="kpi-sub" id="kpiProfitName">Aucune donnée</div>
   </div>
-  <div class="kpi-card lowqty">
-    <div class="kpi-label">Plus faible quantité</div>
-    <div class="kpi-value" id="kpiLowQtyValue">—</div>
-    <div class="kpi-sub" id="kpiLowQtyName">Aucune donnée</div>
+  <div class="kpi-card stock">
+    <div class="kpi-label">Stock critique</div>
+    <div class="kpi-value" id="kpiStockValue">—</div>
+    <div class="kpi-sub" id="kpiStockName">Aucune donnée</div>
   </div>
 </div>
 
-<section class="section">
+<section class="section" id="sectionMostSold">
   <div class="section-title">
-    <h2>💰 Fort CA</h2>
+    <div>
+      <h2>🥇 Plus vendus</h2>
+      <p>Classés par volume de ventes (quantité) — du plus vendu au moins vendu.</p>
+    </div>
   </div>
-  <div class="rank-grid" id="caProducts"></div>
+  <div class="rank-grid" id="mostSoldProducts"></div>
 </section>
 
-<section class="section">
+<section class="section" id="sectionProfit">
   <div class="section-title">
-    <h2>📈 Fort bénéfice</h2>
+    <div>
+      <h2>📈 Meilleurs bénéfices</h2>
+      <p>Classés par marge (bénéfice ÷ CA), puis par bénéfice total — pas par volume seul.</p>
+    </div>
   </div>
   <div class="rank-grid" id="profitProducts"></div>
 </section>
 
-<section class="section">
+<section class="section" id="sectionRevenue">
   <div class="section-title">
-    <h2>📉 Faible quantité vendue</h2>
+    <div>
+      <h2>💰 Fort chiffre d'affaires</h2>
+      <p>Classés par CA total (prix × quantité sur sale_items actifs).</p>
+    </div>
   </div>
-  <div class="rank-grid" id="lowQtyProducts"></div>
+  <div class="rank-grid" id="caProducts"></div>
 </section>
 
-<section class="section">
+<section class="section" id="sectionLeastSold">
   <div class="section-title">
-    <h2>🥇 Top Produits</h2>
+    <div>
+      <h2>📉 Moins vendus</h2>
+      <p>Produits avec le plus faible volume de ventes sur la période.</p>
+    </div>
   </div>
-  <div class="rank-grid" id="topProducts"></div>
+  <div class="rank-grid" id="leastSoldProducts"></div>
 </section>
 
-<section class="section">
+<section class="section" id="sectionLowStock">
   <div class="section-title">
-    <h2>⚠️ Produits Faibles</h2>
+    <div>
+      <h2>⚠️ Stock faible ou critique</h2>
+      <p>Produits actifs sous le seuil d'alerte (stock_alert ou lowStockLimit).</p>
+    </div>
   </div>
-  <div class="rank-grid" id="lowProducts"></div>
+  <div class="rank-grid" id="lowStockProducts"></div>
 </section>
 
 <nav>
