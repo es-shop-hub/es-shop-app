@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+default-src 'self';
+script-src 'self' https://www.gstatic.com https://www.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com;
+connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;
+img-src 'self' data: https:;
+style-src 'self' 'unsafe-inline';
+font-src 'self' https:;
+frame-src https://*.firebaseapp.com;
+object-src 'none';
+base-uri 'self';
+form-action 'self';
+">
+  <title>Demandes produits — Stats</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0 0 100px;
+      background: #f5f6fa;
+      color: #111;
+    }
+    header {
+      background: #0B3D2E;
+      color: #fff;
+      padding: 14px;
+    }
+    .container {
+      max-width: 980px;
+      margin: 16px auto;
+      padding: 0 12px;
+      box-sizing: border-box;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .toolbar select, .toolbar button {
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 13px;
+      background: #fff;
+    }
+    .toolbar button {
+      background: #0B3D2E;
+      color: #fff;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .kpi {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .kpi .label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+    .kpi .value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0B3D2E;
+    }
+    .kpi .sub {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #f1f5f9;
+      text-align: left;
+      font-size: 13px;
+      vertical-align: top;
+    }
+    th {
+      background: #f8fafc;
+      color: #334155;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+    .actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .btn-row {
+      border: none;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .btn-inc { background: #dcfce7; color: #166534; }
+    .btn-fulfill { background: #dbeafe; color: #1e3a8a; }
+    .btn-ignore { background: #fef3c7; color: #92400e; }
+    .btn-delete { background: #fee2e2; color: #991b1b; }
+    .status {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .status-active { background: #dcfce7; color: #166534; }
+    .status-fulfilled { background: #dbeafe; color: #1e3a8a; }
+    .status-ignored { background: #fef3c7; color: #92400e; }
+    .empty {
+      margin-top: 10px;
+      background: #fff;
+      border: 1px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+    }
+    .top-links {
+      margin-bottom: 10px;
+    }
+    .top-links a {
+      color: #0B3D2E;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    nav {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      background: #111;
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      z-index: 999;
+    }
+    .nav-item {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      text-decoration: none;
+      color: #e5e5e5;
+      font-size: 11px;
+      padding: 8px 4px;
+      border-radius: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .nav-item.active {
+      background: rgba(212, 175, 55, 0.12);
+      color: #D4AF37;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h3>StockFlow — Stats demandes produits</h3>
+  </header>
+
+  <div class="container">
+    <div class="top-links">
+      <a href="./demand_add.html">← Ajouter une demande</a>
+    </div>
+
+    <div class="toolbar">
+      <label for="statusFilter">Statut</label>
+      <select id="statusFilter">
+        <option value="all">Tous</option>
+        <option value="active">Actif</option>
+        <option value="fulfilled">Rempli</option>
+        <option value="ignored">Ignoré</option>
+      </select>
+      <button type="button" id="refreshBtn">Actualiser</button>
+    </div>
+
+    <section class="kpis">
+      <div class="kpi">
+        <div class="label">Demandes actives</div>
+        <div class="value" id="kpiActiveCount">0</div>
+        <div class="sub">Statut active</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Plus demandé</div>
+        <div class="value" id="kpiTopCount">0</div>
+        <div class="sub" id="kpiTopLabel">-</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Demandes 7 jours</div>
+        <div class="value" id="kpiWeekCount">0</div>
+        <div class="sub">based on lastRequestedAt</div>
+      </div>
+    </section>
+
+    <table id="demandsTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Produit demandé</th>
+          <th>Note</th>
+          <th>Demandes</th>
+          <th>Statut</th>
+          <th>Dernière demande</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="demandsBody"></tbody>
+    </table>
+    <div id="emptyState" class="empty" hidden>Aucune demande pour ce filtre.</div>
+  </div>
+
+  <nav>
+    <a class="nav-item" href="../index.html">🛒 Vente</a>
+    <a class="nav-item" href="../products.html">📦 Produits</a>
+    <a class="nav-item" href="./demand_add.html">➕ Demande</a>
+    <a class="nav-item active" href="./demand_stats.html">📊 Stats</a>
+    <a class="nav-item" href="../pages.html">🔗 Menu</a>
+  </nav>
+
+  <script type="module" src="./js/demand-stats.js"></script>
+</body>
+</html>
