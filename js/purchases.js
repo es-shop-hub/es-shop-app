@@ -303,6 +303,12 @@ async function refreshPurchaseFundingSuggestions() {
 function schedulePurchaseFundingRefresh() {
   clearTimeout(fundingSuggestTimer);
 
+  // Un changement de produit/quantité/prix doit recalculer la suggestion
+  // même si l'utilisateur avait modifié le champ avant.
+  if (purchaseFundingAmountInput) {
+    delete purchaseFundingAmountInput.dataset.userEdited;
+  }
+
   fundingSuggestTimer = setTimeout(() => {
     refreshPurchaseFundingSuggestions().catch(console.error);
   }, 300);
