@@ -24,7 +24,7 @@ function isCalcInjectableInput(el) {
     return false;
   }
 
-  if (el.type === "number" || el.type === "text" || el.type === "") {
+  if (el.type === "number" || el.type === "text" || el.type === "" || el.type === "tel") {
     return true;
   }
 
@@ -99,7 +99,7 @@ overlay.className = "sf-calc-overlay";
 Object.assign(overlay.style, {
   position: "fixed",
   inset: "0",
-  zIndex: "11000",
+  zIndex: "12000",
   display: "none",
   pointerEvents: "none"
 });
@@ -125,7 +125,7 @@ Object.assign(box.style, {
   overflow: "hidden",
   pointerEvents: "auto",
   border: "1px solid #ddd",
-  zIndex: "11050"
+  zIndex: "12050"
 });
 
 overlay.appendChild(box);
@@ -260,17 +260,128 @@ let expression = "";
 function safeCalculate(expr) {
   const sanitized = expr
     .replace(/×/g, "*")
-    .replace(/÷/g, "/");
+    .replace(/÷/g, "/")
+    .trim();
 
-  if (!/^[0-9+\-*/.() ]+$/.test(sanitized)) {
+  if (!sanitized || !/^[0-9+\-*/.() ]+$/.test(sanitized)) {
     return "Erreur";
   }
 
   try {
-    return Function(`"use strict";return (${sanitized})`)();
+    return evaluateExpression(sanitized);
   } catch {
     return "Erreur";
   }
+}
+
+function evaluateExpression(source) {
+  let index = 0;
+
+  function peek() {
+    return source[index] || "";
+  }
+
+  function consume(expected) {
+    if (expected && source[index] !== expected) {
+      throw new Error("invalid expression");
+    }
+    return source[index++];
+  }
+
+  function skipSpaces() {
+    while (peek() === " ") index += 1;
+  }
+
+  function parsePrimary() {
+    skipSpaces();
+
+    if (peek() === "-") {
+      consume("-");
+      return -parsePrimary();
+    }
+
+    if (peek() === "+") {
+      consume("+");
+      return parsePrimary();
+    }
+
+    if (peek() === "(") {
+      consume("(");
+      const value = parseAddSub();
+      skipSpaces();
+      consume(")");
+      return value;
+    }
+
+    let start = index;
+    while (/[0-9.]/.test(peek())) {
+      index += 1;
+    }
+
+    if (start === index) {
+      throw new Error("invalid number");
+    }
+
+    const value = Number(source.slice(start, index));
+    if (Number.isNaN(value)) {
+      throw new Error("invalid number");
+    }
+
+    return value;
+  }
+
+  function parseMulDiv() {
+    let value = parsePrimary();
+
+    while (true) {
+      skipSpaces();
+      const op = peek();
+
+      if (op !== "*" && op !== "/") {
+        return value;
+      }
+
+      consume(op);
+      const right = parsePrimary();
+
+      if (op === "*") {
+        value *= right;
+      } else {
+        if (right === 0) throw new Error("division by zero");
+        value /= right;
+      }
+    }
+  }
+
+  function parseAddSub() {
+    let value = parseMulDiv();
+
+    while (true) {
+      skipSpaces();
+      const op = peek();
+
+      if (op !== "+" && op !== "-") {
+        return value;
+      }
+
+      consume(op);
+      const right = parseMulDiv();
+      value = op === "+" ? value + right : value - right;
+    }
+  }
+
+  const result = parseAddSub();
+  skipSpaces();
+
+  if (index !== source.length) {
+    throw new Error("trailing input");
+  }
+
+  if (!Number.isFinite(result)) {
+    throw new Error("invalid result");
+  }
+
+  return result;
 }
 
 keys.forEach(key => {
@@ -381,11 +492,13 @@ function openCalc() {
   positionCalcBox();
   overlay.style.display = "block";
   calcOpened = true;
+  calcBtn.setAttribute("aria-expanded", "true");
 }
 
 function closeCalc() {
   overlay.style.display = "none";
   calcOpened = false;
+  calcBtn.setAttribute("aria-expanded", "false");
 }
 
 calcBtn.addEventListener("click", event => {

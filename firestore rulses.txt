@@ -1,71 +1,175 @@
-// StockFlow — règles Firestore (générales)
-// Prérequis manuel : system/meta → { usersCount: 0, maxUsers: 5 }
-// Déployer : Firebase Console → Firestore → Règles → Publier
+// =============================================================================
+// STOCKFLOW — Règles Firestore (source unique)
+// Fichier : firestore rulses.txt
+// Déploiement : Firebase Console → Firestore → Règles → coller ce contenu
+// Ne pas utiliser firestore.rules (supprimé volontairement)
+// =============================================================================
 
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
     function signedIn() {
       return request.auth != null;
     }
 
+    function validRole(role) {
+      return role in ['admin', 'seller'];
+    }
+
+    function metaDoc() {
+      return get(/databases/$(database)/documents/system/meta);
+    }
+
+    function metaExists() {
+      return exists(/databases/$(database)/documents/system/meta);
+    }
+
+    // Limite utilisateurs : si meta absente, premier inscrit autorisé
+    function underUserLimit() {
+      return !metaExists()
+        || metaDoc().data.usersCount < metaDoc().data.maxUsers;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
     function isAdmin() {
       return signedIn()
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        && userExists(request.auth.uid)
+        && userDoc(request.auth.uid).data.role == 'admin';
     }
 
-    function underUserLimit() {
-      return exists(/databases/$(database)/documents/system/meta)
-        && get(/databases/$(database)/documents/system/meta).data.usersCount
-           < get(/databases/$(database)/documents/system/meta).data.maxUsers;
+    function isActiveMember() {
+      return signedIn()
+        && userExists(request.auth.uid)
+        && userDoc(request.auth.uid).data.isActive == true
+        && validRole(userDoc(request.auth.uid).data.role);
     }
 
-    // ── Limite 5 users ─────────────────────────────────────────
+    // Inscription : profil Firestore pas encore créé (normal à la 1ère connexion)
+    function isNewOwnUser(userId) {
+      return signedIn()
+        && request.auth.uid == userId
+        && !userExists(userId);
+    }
+
+    function validUserCreate() {
+      return request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          'userId', 'name', 'role', 'isActive', 'createdAt'
+        ])
+        && validRole(request.resource.data.role)
+        && request.resource.data.isActive is bool
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120;
+    }
+
+    function validMetaCreate() {
+      return request.resource.data.keys().hasAll(['usersCount', 'maxUsers'])
+        && request.resource.data.maxUsers == 5
+        && request.resource.data.usersCount == 0;
+    }
+
+    function validMetaUserIncrement() {
+      return request.resource.data.maxUsers == 5
+        && request.resource.data.usersCount == resource.data.usersCount + 1
+        && request.resource.data.usersCount <= 5;
+    }
+
+    function validMetaUserDecrement() {
+      return request.resource.data.maxUsers == 5
+        && request.resource.data.usersCount == resource.data.usersCount - 1
+        && request.resource.data.usersCount >= 0;
+    }
+
+    // ── system/meta (compteur max 5 users) ───────────────────────────────────
+    // Créer une fois : { usersCount: 0, maxUsers: 5 }
     match /system/meta {
       allow read: if signedIn();
 
       allow create: if signedIn()
-        && request.resource.data.maxUsers == 5
-        && request.resource.data.usersCount == 0;
+        && !metaExists()
+        && validMetaCreate();
 
-      allow update: if signedIn()
-        && request.resource.data.maxUsers == 5
-        && (
-          request.resource.data.usersCount == resource.data.usersCount + 1
-          || request.resource.data.usersCount == resource.data.usersCount - 1
-          || isAdmin()
-        );
+      allow update: if signedIn() && (
+        validMetaUserIncrement()
+        || validMetaUserDecrement()
+        || isAdmin()
+      );
     }
 
-    // ── Users (signup.js crée le doc — rôle géré par le JS) ────
+    // ── users ────────────────────────────────────────────────────────────────
+    // Signup : Auth Firebase OK + doc users/{uid} inexistant → création autorisée
     match /users/{userId} {
       allow read: if signedIn();
 
-      allow create: if signedIn()
-        && request.auth.uid == userId
-        && underUserLimit();
+      allow create: if isNewOwnUser(userId)
+        && underUserLimit()
+        && validUserCreate();
 
-      allow update: if signedIn()
-        && (request.auth.uid == userId || isAdmin());
+      allow update: if signedIn() && (
+        (request.auth.uid == userId
+          && userExists(userId)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.userId == resource.data.userId)
+        || isAdmin()
+      );
 
       allow delete: if isAdmin();
     }
 
-    // ── Collections métier ─────────────────────────────────────
-    match /products/{id}         { allow read, write: if signedIn(); }
-    match /sales/{id}            { allow read, write: if signedIn(); }
-    match /sale_items/{id}       { allow read, write: if signedIn(); }
-    match /stock_movements/{id}  { allow read, write: if signedIn(); }
-    match /purchases/{id}        { allow read, write: if signedIn(); }
-    match /purchase_items/{id}   { allow read, write: if signedIn(); }
-    match /expenses/{id}         { allow read, write: if signedIn(); }
-    match /debts/{id}            { allow read, write: if signedIn(); }
-    match /losses/{id}           { allow read, write: if signedIn(); }
-    match /logs/{id}             { allow read, write: if signedIn(); }
+    // ── Collections métier — auth Firebase suffit (0 get users) ──────────────
+    match /products/{id} {
+      allow read, write: if signedIn();
+    }
 
-    // ── Config (écriture admin) ────────────────────────────────
+    match /sales/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /sale_items/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /stock_movements/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /purchases/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /purchase_items/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /expenses/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /debts/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /losses/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /logs/{id} {
+      allow read, write: if signedIn();
+    }
+
+    // ── Config ───────────────────────────────────────────────────────────────
     match /appConfig/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
@@ -76,8 +180,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ── Sous-collections (ne bloque pas products/{id}/...) ───────
-    match /{col}/{docId}/{path=**} {
+    // ── Demandes produits absents ────────────────────────────────────────────
+    match /product_demands/{id} {
+      allow read, write: if signedIn();
+    }
+
+    // ── Module Batch (isolé) ─────────────────────────────────────────────────
+    match /batch_products/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /product_batches/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /batch_movements/{id} {
       allow read, write: if signedIn();
     }
   }
