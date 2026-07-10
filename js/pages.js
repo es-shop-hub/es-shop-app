@@ -65,6 +65,14 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
+  document.querySelectorAll(".card.admin-only").forEach(card => {
+    if (role === "admin") {
+      card.hidden = false;
+    } else {
+      card.remove();
+    }
+  });
+
   /* ================================
      ENABLE NAV ONLY IF AUTHORIZED
   ================================= */

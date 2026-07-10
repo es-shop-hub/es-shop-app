@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+default-src 'self';
+script-src 'self' https://www.gstatic.com https://www.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com;
+connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;
+img-src 'self' data: https:;
+style-src 'self' 'unsafe-inline';
+font-src 'self' https:;
+frame-src https://*.firebaseapp.com;
+object-src 'none';
+base-uri 'self';
+form-action 'self';
+">
+  <title>StockFlow+ — Quotas &amp; sécurité cloud</title>
+  <link rel="stylesheet" href="./billing.css">
+</head>
+<body>
+
+  <div id="accessDenied" role="alert">⛔ Accès réservé à l'administrateur</div>
+
+  <div id="pageContent">
+    <header class="billing-header">
+      <div class="billing-header-inner">
+        <a class="back-link" href="../pages.html">← Retour au menu</a>
+        <span class="billing-badge">Administration</span>
+        <h1>Continuité de service StockFlow+</h1>
+        <p>
+          Votre activité repose sur des services cloud fiables. Cette page vous aide à comprendre
+          comment protéger l'accès à vos données et éviter toute interruption en cas de forte activité.
+        </p>
+      </div>
+    </header>
+
+    <main class="billing-main">
+      <div class="billing-grid">
+
+        <section class="billing-card">
+          <h2>☁️ Pourquoi StockFlow+ utilise le cloud</h2>
+          <p>
+            StockFlow+ s'appuie sur <strong>Google Firebase</strong> pour stocker vos ventes, votre stock,
+            vos dépenses et vos statistiques en toute sécurité. Ce choix vous permet d'accéder à votre
+            boutique depuis plusieurs appareils, sans serveur à gérer vous-même.
+          </p>
+          <p>
+            Comme toute solution professionnelle en ligne, ces services fonctionnent avec des
+            <strong>quotas d'utilisation</strong> : un volume d'appels API, de lectures et d'écritures
+            inclus chaque mois selon votre formule.
+          </p>
+          <div class="billing-note billing-note-info" role="note">
+            Cette page est <strong>purement informative</strong>. Elle ne calcule pas votre consommation
+            dans l'application : la source officielle reste la console Firebase.
+          </div>
+        </section>
+
+        <div class="billing-grid billing-grid-two">
+          <section class="billing-card">
+            <h2>📊 Surveiller vos quotas</h2>
+            <p>
+              En tant que commerçant, votre priorité est de vendre et de suivre votre activité sans
+              surprise technique. Pourtant, une hausse soudaine de ventes, de synchronisations ou
+              d'utilisateurs peut augmenter la consommation des services cloud.
+            </p>
+            <p>
+              Consulter régulièrement vos statistiques d'usage dans la console Firebase vous permet de
+              <strong>anticiper</strong> avant qu'une limite ne soit atteinte.
+            </p>
+          </section>
+
+          <section class="billing-card">
+            <h2>⚠️ Risques en cas de dépassement</h2>
+            <p>
+              Si les quotas gratuits ou prévus sont dépassés sans mesure de protection, Firebase peut
+              <strong>limiter ou suspendre temporairement</strong> certains services.
+            </p>
+            <ul>
+              <li>Impossibilité d'enregistrer de nouvelles ventes</li>
+              <li>Données momentanément inaccessibles</li>
+              <li>Perturbation de la synchronisation entre appareils</li>
+              <li>Interruption de votre gestion au moment où vous en avez le plus besoin</li>
+            </ul>
+            <div class="billing-note billing-note-warn" role="note">
+              Une coupure technique, même courte, peut impacter directement votre chiffre d'affaires
+              et la confiance de vos clients.
+            </div>
+          </section>
+        </div>
+
+        <section class="billing-card">
+          <h2>🛡️ La carte bancaire : une sécurité de continuité</h2>
+          <p>
+            L'ajout d'une carte bancaire sur votre compte Firebase n'est pas une « dépense obligatoire »
+            au quotidien. C'est surtout une <strong>garantie de continuité</strong> : en cas de pic
+            d'activité (fin de mois, forte saison, plusieurs vendeurs connectés), le service peut
+            continuer à fonctionner au lieu de s'arrêter net.
+          </p>
+          <p>
+            Vous gardez le contrôle : des alertes et des plafonds peuvent être configurés dans la
+            console Google Cloud pour maîtriser les coûts. L'objectif est de protéger la
+            <strong>pérennité de votre entreprise</strong>, pas de vous faire payer inutilement.
+          </p>
+          <p>
+            Pour un commerçant, la stabilité de l'outil de gestion est aussi importante que celle
+            du stock ou de la caisse : sans accès aux données, la décision devient impossible.
+          </p>
+        </section>
+
+        <section class="billing-card billing-cta">
+          <h2>🚀 Passer à l'action</h2>
+          <p>
+            Utilisez les boutons ci-dessous pour ouvrir la console officielle Firebase dans un nouvel
+            onglet. Connectez-vous avec le compte Google administrateur de votre projet.
+          </p>
+          <div class="billing-actions">
+            <button type="button" class="billing-btn billing-btn-secondary" id="btnUsageStats">
+              Voir mes statistiques d'usage
+            </button>
+            <button type="button" class="billing-btn billing-btn-primary" id="btnSecureBilling">
+              Sécuriser mon compte (Ajouter une carte)
+            </button>
+          </div>
+          <p class="billing-disclaimer">
+            Liens externes vers console.firebase.google.com — réservé aux administrateurs StockFlow+.
+          </p>
+        </section>
+
+      </div>
+    </main>
+
+    <p class="billing-footer">
+      StockFlow+ — ES-Company · Page d'information quotas &amp; sécurité cloud · Aucun calcul local effectué.
+    </p>
+
+    <nav class="billing-nav" aria-label="Navigation principale">
+      <a href="../index.html">🛒 Vente</a>
+      <a href="../pages.html">🔗 Menu</a>
+      <a href="../settings.html">⚙️ Paramètres</a>
+      <a class="active" href="./billing.html" data-page="billing.html">☁️ Quotas</a>
+      <a href="../help.html">🤝 Aide</a>
+    </nav>
+  </div>
+
+  <script type="module" src="./billing.js"></script>
+</body>
+</html>
