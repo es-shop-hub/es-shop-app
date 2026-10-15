@@ -37,6 +37,9 @@ export const state = {
   users: [],
   stockMovements: [],
   recentStockMovements: [],
+  batchBatches: [],
+  batchMovements: [],
+  batchStats: null,
   currency: "$",
   config: null,
   chartReady: false
@@ -320,6 +323,26 @@ async function loadData() {
     }));
     state.purchaseItems = purchaseItemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+    try {
+      const {
+        loadBatches,
+        loadBatchMovements,
+        aggregateBatchStats
+      } = await import("../batch/js/batch-service.js");
+      const [batches, movements] = await Promise.all([
+        loadBatches(),
+        loadBatchMovements()
+      ]);
+      state.batchBatches = batches;
+      state.batchMovements = movements;
+      state.batchStats = aggregateBatchStats(batches, movements, {});
+    } catch (batchErr) {
+      console.warn("batch stats load:", batchErr);
+      state.batchBatches = [];
+      state.batchMovements = [];
+      state.batchStats = null;
+    }
+
     populateSellerFilter();
 
     if (select) {
@@ -590,6 +613,7 @@ function buildPdfPayload() {
     return {
       id: sale.id,
       sellerId: sale.sellerId,
+      clientName: sale.clientName || "",
       amount: n(sale.total_amount),
       profit: n(sale.total_profit),
       status: sale.status,
@@ -666,6 +690,16 @@ async function setupChartModule() {
   } catch (error) {
     console.error("Chart module:", error);
     debug("Graphique indisponible");
+    // Tuiles visibles même si Chart.js CDN échoue
+    const grid = $("chartMetricGrid");
+    if (grid && !grid.childElementCount) {
+      const msg = document.createElement("div");
+      msg.className = "empty-state";
+      msg.style.padding = "12px";
+      msg.textContent =
+        "Graphique indisponible (module). Reconnectez-vous admin pour charger les données.";
+      grid.appendChild(msg);
+    }
   }
 }
 

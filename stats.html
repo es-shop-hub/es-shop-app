@@ -346,7 +346,84 @@ main{
 .chart-container{
   position:relative;
   width:100%;
-  height:260px;
+  height:320px;
+}
+
+.chart-metric-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:0;
+  margin:12px 0 0;
+  border-radius:10px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,0.08);
+}
+
+@media (min-width:700px){
+  .chart-metric-grid{
+    grid-template-columns:repeat(3,1fr);
+  }
+}
+
+@media (min-width:1100px){
+  .chart-metric-grid{
+    grid-template-columns:repeat(4,1fr);
+  }
+}
+
+.chart-metric-tile{
+  appearance:none;
+  border:none;
+  border-right:1px solid rgba(255,255,255,0.12);
+  border-bottom:1px solid rgba(255,255,255,0.12);
+  min-height:92px;
+  padding:12px 14px;
+  text-align:left;
+  cursor:pointer;
+  color:#fff;
+  background:#3c4043;
+  transition:filter .15s ease, opacity .15s ease;
+}
+
+.chart-metric-tile:hover{
+  filter:brightness(1.08);
+}
+
+.chart-metric-tile.is-off{
+  background:#2a2a2a !important;
+  color:#9aa0a6;
+  opacity:.85;
+}
+
+.chart-metric-check{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:12px;
+  font-weight:600;
+  margin-bottom:8px;
+}
+
+.chart-metric-check input{
+  width:16px;
+  height:16px;
+  accent-color:#fff;
+  pointer-events:none;
+}
+
+.chart-metric-value{
+  font-size:26px;
+  font-weight:700;
+  line-height:1.1;
+  letter-spacing:-0.02em;
+}
+
+.chart-metric-group{
+  font-size:10px;
+  opacity:.85;
+  margin-top:6px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
 }
 
 /* INSIGHTS */
@@ -473,6 +550,23 @@ main{
   font-size:12px;
   color:var(--muted);
   line-height:1.5;
+}
+
+a.shortcut-link{
+  display:block;
+  text-decoration:none;
+  color:inherit;
+  cursor:pointer;
+  transition:transform .12s ease, box-shadow .12s ease;
+}
+
+a.shortcut-link:hover{
+  transform:translateY(-1px);
+  box-shadow:0 4px 14px rgba(0,0,0,0.1);
+}
+
+a.shortcut-link:active{
+  transform:scale(0.99);
 }
 
 /* ACTIVITY */
@@ -720,16 +814,6 @@ nav .nav-item.active{
       </select>
     </div>
 
-    <div class="filter-box" id="chartFilterBox">
-      <label for="chartType">Graphique</label>
-
-      <select id="chartType">
-        <option value="sales">Chiffre d'affaires</option>
-        <option value="profit">Profit</option>
-        <option value="debts">Dettes</option>
-      </select>
-    </div>
-
     <div class="filter-box" id="analysisFilterBox">
       <label for="sortType">Analyse</label>
 
@@ -769,11 +853,11 @@ nav .nav-item.active{
 
       <div>
         <div class="section-title">
-          Vue rapide
+          Vue d'ensemble
         </div>
 
         <div class="section-subtitle">
-          Performance globale de la boutique
+          Totaux classique + batch
         </div>
       </div>
 
@@ -783,58 +867,115 @@ nav .nav-item.active{
 
       <div class="kpi-card" id="salesCard">
         <div class="kpi-top">
-          <div class="kpi-label">💰 Chiffre d'affaires</div>
+          <div class="kpi-label">Chiffre d'affaires Total</div>
           <div class="kpi-trend trend-up" id="salesTrend">+0%</div>
         </div>
-
         <div class="kpi-value" id="salesValue">0$</div>
-
-        <div class="kpi-footer">
-          Comparé à la période précédente
-        </div>
+        <div class="kpi-footer" id="salesBreakdown">Classique · Batch</div>
       </div>
 
       <div class="kpi-card" id="profitCard">
         <div class="kpi-top">
-          <div class="kpi-label">📈 Profit réel</div>
+          <div class="kpi-label">Profit réel Total</div>
           <div class="kpi-trend trend-up" id="profitTrend">+0%</div>
         </div>
-
         <div class="kpi-value" id="profitValue">0$</div>
-
-        <div class="kpi-footer">
-          Après pertes et dépenses
-        </div>
+        <div class="kpi-footer" id="profitBreakdown">Classique · Batch</div>
       </div>
 
-      <div class="kpi-card" id="basketCard">
+      <div class="kpi-card" id="profitNoInvestCard">
         <div class="kpi-top">
-          <div class="kpi-label">🛒 Panier moyen</div>
-          <div class="kpi-trend trend-up" id="basketTrend">+0%</div>
+          <div class="kpi-label">Profit réel sans invest. extérieur Total</div>
+          <div class="kpi-trend trend-up" id="profitNoInvestTrend">—</div>
         </div>
-
-        <div class="kpi-value" id="basketValue">0$</div>
-
-        <div class="kpi-footer">
-          Moyenne par vente
-        </div>
+        <div class="kpi-value" id="profitNoInvestValue">0$</div>
+        <div class="kpi-footer">Hors apports extérieurs (investment)</div>
       </div>
 
-      <div class="kpi-card" id="marginCard">
+      <div class="kpi-card" id="stockTotalCard">
         <div class="kpi-top">
-          <div class="kpi-label">⚡ Marge moyenne</div>
-          <div class="kpi-trend trend-down" id="marginTrend">0%</div>
+          <div class="kpi-label">Valeur stock Total</div>
+          <div class="kpi-trend" id="stockTotalTrend">—</div>
         </div>
+        <div class="kpi-value" id="stockTotalValue">0$</div>
+        <div class="kpi-footer" id="stockTotalBreakdown">Classique · Batch</div>
+      </div>
 
-        <div class="kpi-value" id="marginValue">0%</div>
-
-        <div class="kpi-footer">
-          Rentabilité business
+      <div class="kpi-card" id="rotationTotalCard">
+        <div class="kpi-top">
+          <div class="kpi-label">Rotation stock Total</div>
+          <div class="kpi-trend" id="rotationTotalTrend">—</div>
         </div>
+        <div class="kpi-value" id="rotationTotalValue">0</div>
+        <div class="kpi-footer">Qté vendue / qté en stock</div>
       </div>
 
     </div>
 
+  </section>
+
+  <section class="section" id="classicBatchSplitSection">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Détail classique / batch</div>
+        <div class="section-subtitle">Totaux séparés (hors Vue d'ensemble)</div>
+      </div>
+    </div>
+    <div class="kpi-grid" id="splitKpiGrid">
+      <div class="kpi-card" id="classicCaCard">
+        <div class="kpi-label">CA classique</div>
+        <div class="kpi-value" id="classicCaValue">0$</div>
+      </div>
+      <div class="kpi-card" id="classicProfitCard">
+        <div class="kpi-label">Profit classique</div>
+        <div class="kpi-value" id="classicProfitValue">0$</div>
+      </div>
+      <div class="kpi-card" id="classicBasketCard">
+        <div class="kpi-label">Panier moyen</div>
+        <div class="kpi-value" id="basketValue">0$</div>
+      </div>
+      <div class="kpi-card" id="classicMarginCard">
+        <div class="kpi-label">Marge moyenne %</div>
+        <div class="kpi-value" id="marginValue">0%</div>
+      </div>
+      <div class="kpi-card" id="batchCollectedCard">
+        <div class="kpi-label">Encaissé batch</div>
+        <div class="kpi-value" id="batchCollectedValue">0$</div>
+      </div>
+      <div class="kpi-card" id="batchBenefitCard">
+        <div class="kpi-label">Bénéfice batch affiché</div>
+        <div class="kpi-value" id="batchBenefitValue">0$</div>
+      </div>
+      <div class="kpi-card" id="batchStockCard">
+        <div class="kpi-label">Valeur stock batch</div>
+        <div class="kpi-value" id="batchStockValue">0$</div>
+      </div>
+      <div class="kpi-card" id="classicStockCard">
+        <div class="kpi-label">Valeur stock classique</div>
+        <div class="kpi-value" id="classicStockValue">0$</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="chartsSection">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Tendances</div>
+        <div class="section-subtitle">Cliquez une tuile pour afficher / masquer sa courbe</div>
+      </div>
+    </div>
+    <div class="chart-card" id="chartCard">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Évolution (Search Console)</div>
+          <div class="chart-sub">Plusieurs courbes classique · batch · Total · jours complets</div>
+        </div>
+      </div>
+      <div id="chartMetricGrid" class="chart-metric-grid" role="group" aria-label="Séries du graphique"></div>
+      <div class="chart-container" id="chartContainer">
+        <canvas id="statsChart"></canvas>
+      </div>
+    </div>
   </section>
 
   <section class="section" id="operationalFinanceSection">
@@ -1004,32 +1145,6 @@ Ruptures stock
 
 </section>
 
-  <section class="section" id="chartsSection">
-
-    <div class="section-header">
-      <div>
-        <div class="section-title">Tendances business</div>
-        <div class="section-subtitle">Évolution des performances</div>
-      </div>
-    </div>
-
-    <div class="chart-card" id="chartCard">
-
-      <div class="chart-header">
-        <div>
-          <div class="chart-title">Évolution des ventes</div>
-          <div class="chart-sub">Chiffre d'affaires et profit</div>
-        </div>
-      </div>
-
-      <div class="chart-container" id="chartContainer">
-        <canvas id="statsChart"></canvas>
-      </div>
-
-    </div>
-
-  </section>
-
   <section class="section" id="productsSection">
 
     <div class="section-header">
@@ -1123,30 +1238,46 @@ Clients non soldés
 </section>
 
 
-  <section class="section" id="alertsSection">
+  <section class="section" id="shortcutsSection">
 
     <div class="section-header">
       <div>
-        <div class="section-title">Alertes système</div>
-        <div class="section-subtitle">Éléments nécessitant attention</div>
+        <div class="section-title">Raccourcis</div>
+        <div class="section-subtitle">Accès rapide aux pages</div>
       </div>
     </div>
 
-    <div class="alerts" id="alertsContainer">
+    <div class="alerts" id="shortcutsContainer">
 
-      <div class="alert" id="expenseAlertCard">
-        <div class="alert-title">💸 Dépenses anormales</div>
-        <div class="alert-text" id="expenseAlertText">
-          Analyse en cours...
-        </div>
-      </div>
+      <a class="alert shortcut-link" id="shortcutExpenses" href="expenses.html">
+        <div class="alert-title">💸 Dépenses</div>
+        <div class="alert-text">Ouvrir la page Dépenses</div>
+      </a>
 
-      <div class="alert low" id="businessAlertCard">
-        <div class="alert-title">📈 Opportunités business</div>
-        <div class="alert-text" id="businessAlertText">
-          Analyse en cours...
-        </div>
-      </div>
+      <a class="alert low shortcut-link" id="shortcutDebts" href="debts.html">
+        <div class="alert-title">🧾 Dettes</div>
+        <div class="alert-text">Ouvrir la page Dettes</div>
+      </a>
+
+      <a class="alert shortcut-link" id="shortcutClients" href="clients.html" style="border-left-color:#2563EB;">
+        <div class="alert-title">👥 Clients</div>
+        <div class="alert-text">Apport, récurrents, récompenses</div>
+      </a>
+
+      <a class="alert low shortcut-link" id="shortcutRanging" href="ranging.html">
+        <div class="alert-title">🏆 Ranking</div>
+        <div class="alert-text">CA, bénéfices, produits faibles</div>
+      </a>
+
+      <a class="alert shortcut-link" id="shortcutBatch" href="batch/batch_stats.html" style="border-left-color:#E37400;">
+        <div class="alert-title">📦 Stats lots</div>
+        <div class="alert-text">Marges et performance batch</div>
+      </a>
+
+      <a class="alert low shortcut-link" id="shortcutProducts" href="products.html">
+        <div class="alert-title">📦 Produits</div>
+        <div class="alert-text">Gestion du stock</div>
+      </a>
 
     </div>
 

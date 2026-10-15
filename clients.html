@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="
+default-src 'self';
+script-src 'self' https://www.gstatic.com https://www.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com;
+connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;
+img-src 'self' data: https:;
+style-src 'self' 'unsafe-inline';
+font-src 'self' https:;
+frame-src https://*.firebaseapp.com;
+object-src 'none';
+base-uri 'self';
+form-action 'self';
+">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockFlow - Clients</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:radial-gradient(circle at top,#1a1a1a,#0a0a0a 70%);color:#fff;min-height:100vh;padding:20px 15px 100px}
+.header{margin-bottom:18px}
+.header h1{font-size:26px;margin-bottom:6px;background:linear-gradient(90deg,#ffd700,#fff3b0,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{color:#aaa;font-size:13px;line-height:1.5}
+.toolbar,.panel{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;padding:14px;background:#151515;border-radius:14px;border:1px solid rgba(255,255,255,0.06)}
+.panel{flex-direction:column;align-items:stretch}
+.field{display:flex;flex-direction:column;gap:4px;min-width:140px;flex:1}
+.field label{font-size:12px;color:#bbb}
+.field input,.field select{background:#111;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:8px 10px;font-size:13px}
+button,.btn{background:#D4AF37;color:#111;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer}
+button.secondary{background:#222;color:#D4AF37;border:1px solid rgba(212,175,55,0.4)}
+#statusMsg{min-height:18px;font-size:12px;color:#aaa;margin-bottom:12px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.kpi-card{background:#151515;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px}
+.kpi-label{font-size:11px;color:#aaa;margin-bottom:6px}
+.kpi-value{font-size:18px;font-weight:700;color:#ffd700}
+.section{margin-bottom:22px}
+.section-title h2{font-size:16px;margin-bottom:4px}
+.section-title p{font-size:12px;color:#888;margin-bottom:10px}
+.list{display:flex;flex-direction:column;gap:8px}
+.client-card{background:#151515;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;cursor:pointer}
+.client-card:hover{border-color:rgba(212,175,55,0.45)}
+.client-card.active{border-color:#D4AF37}
+.client-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}
+.badge{font-size:10px;padding:3px 7px;border-radius:999px;background:rgba(212,175,55,0.15);color:#D4AF37}
+.badge.recurring{background:rgba(22,163,74,0.2);color:#4ade80}
+.meta{font-size:12px;color:#aaa;line-height:1.5}
+.reco{padding:10px 12px;border-left:3px solid #D4AF37;background:#121212;border-radius:0 10px 10px 0;font-size:13px;color:#ddd;margin-bottom:8px}
+.empty{color:#777;font-size:13px;padding:12px}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-top:1px solid rgba(255,255,255,0.08);padding:8px;gap:4px;z-index:20}
+.nav-item{flex:1;text-align:center;text-decoration:none;color:#aaa;font-size:11px;padding:8px 4px}
+.nav-item.active{color:#D4AF37}
+</style>
+</head>
+<body>
+
+<header class="header" id="clientsHeader">
+  <h1>Clients</h1>
+  <p>Apport, récurrents, récompenses et recommandations — calculs locaux.</p>
+</header>
+
+<div class="toolbar" id="clientsToolbar">
+  <div class="field">
+    <label for="periodFilter">Période</label>
+    <select id="periodFilter">
+      <option value="month">Mois en cours</option>
+      <option value="30d">30 jours</option>
+      <option value="7d">7 jours</option>
+      <option value="all">Tout</option>
+    </select>
+  </div>
+  <button type="button" id="applyFilterBtn">Appliquer</button>
+</div>
+
+<p id="statusMsg" aria-live="polite"></p>
+
+<div class="kpi-row" id="clientsKpiRow">
+  <div class="kpi-card">
+    <div class="kpi-label">Clients (filtre)</div>
+    <div class="kpi-value" id="kpiClientsCount">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Récurrents</div>
+    <div class="kpi-value" id="kpiRecurringCount">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">CA période</div>
+    <div class="kpi-value" id="kpiPeriodCa">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Récompenses mois</div>
+    <div class="kpi-value" id="kpiRewardsTotal">0</div>
+  </div>
+</div>
+
+<section class="section" id="catchupSection">
+  <div class="section-title">
+    <h2>Rattrapage — client oublié à la vente</h2>
+    <p>Lie un nom à une vente existante. Le montant vient de la vente (pas de faux CA).</p>
+  </div>
+  <div class="panel" id="catchupPanel">
+    <div class="field">
+      <label for="catchupName">Nom client</label>
+      <input id="catchupName" type="text" maxlength="80" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="catchupPhone">Téléphone (optionnel)</label>
+      <input id="catchupPhone" type="text" maxlength="40" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="catchupSale">Vente existante</label>
+      <select id="catchupSale"></select>
+    </div>
+    <div class="field">
+      <label>Montant vente</label>
+      <input id="catchupAmount" type="text" readonly value="—">
+    </div>
+    <button type="button" id="catchupSaveBtn">Enregistrer client sur la vente</button>
+  </div>
+</section>
+
+<section class="section" id="clientsListSection">
+  <div class="section-title">
+    <h2>Liste clients</h2>
+    <p id="filterHint">Filtre actif — les récurrents sont mis en avant.</p>
+  </div>
+  <div class="list" id="clientsList"></div>
+</section>
+
+<section class="section" id="clientDetailSection">
+  <div class="section-title">
+    <h2>Détail / récompense</h2>
+    <p>Sélectionnez un client. Calcul récompense en local, puis enregistrement DB.</p>
+  </div>
+  <div class="panel" id="rewardPanel">
+    <p class="meta" id="detailSummary">Aucun client sélectionné.</p>
+    <div class="field">
+      <label for="rewardPercent">% du CA client</label>
+      <input id="rewardPercent" type="number" min="0" max="100" step="0.1" value="5">
+    </div>
+    <div class="field">
+      <label for="rewardAmount">Montant récompense</label>
+      <input id="rewardAmount" type="number" min="0" step="0.01" value="0">
+    </div>
+    <div class="field">
+      <label for="rewardNote">Note</label>
+      <input id="rewardNote" type="text" maxlength="200" autocomplete="off">
+    </div>
+    <div class="row-actions">
+      <button type="button" id="calcRewardBtn" class="secondary">Calculer</button>
+      <button type="button" id="saveRewardBtn">Enregistrer récompense</button>
+    </div>
+    <div class="list" id="clientSalesList"></div>
+  </div>
+</section>
+
+<section class="section" id="recoSection">
+  <div class="section-title">
+    <h2>Recommandations</h2>
+    <p>Générées en local — aucune requête Firebase supplémentaire.</p>
+  </div>
+  <div class="list" id="recoList"></div>
+</section>
+
+<nav>
+  <a class="nav-item" href="index.html">Vente</a>
+  <a class="nav-item" href="vendus.html">Vendus</a>
+  <a class="nav-item active" href="clients.html">Clients</a>
+  <a class="nav-item" href="stats.html">Stats</a>
+  <a class="nav-item" href="pages.html">Nav</a>
+</nav>
+
+<script type="module" src="js/clients.js"></script>
+</body>
+</html>

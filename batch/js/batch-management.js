@@ -22,6 +22,7 @@ import {
   statusBadge
 } from "./batch-utils.js";
 import { bindActionButton } from "../../js/utils/buttonManager.js";
+import { upsertClientByName } from "../../js/clients-service.js";
 
 const auth = getAuth();
 let currentUserId = null;
@@ -42,6 +43,7 @@ const els = {
   batchCost: document.getElementById("batchCost"),
   saleQty: document.getElementById("saleQty"),
   saleAmount: document.getElementById("saleAmount"),
+  saleClientName: document.getElementById("saleClientName"),
   saleReason: document.getElementById("saleReason"),
   editProductName: document.getElementById("editProductName"),
   editProductNote: document.getElementById("editProductNote"),
@@ -402,17 +404,28 @@ async function handleDeleteBatch(batch) {
 
 async function handleRecordSale() {
   try {
+    const clientName = (els.saleClientName?.value || "").trim();
+    if (!clientName) {
+      throw new Error("Nom client requis.");
+    }
     await recordBatchSale(
       {
         batchId: els.saleBatchSelect?.value,
         quantityOut: els.saleQty?.value,
         amountCollected: els.saleAmount?.value,
-        reason: els.saleReason?.value || "sale"
+        reason: els.saleReason?.value || "sale",
+        clientName
       },
       currentUserId
     );
+    try {
+      await upsertClientByName(clientName, currentUserId);
+    } catch (err) {
+      console.warn("upsertClientByName:", err);
+    }
     if (els.saleQty) els.saleQty.value = "";
     if (els.saleAmount) els.saleAmount.value = "";
+    if (els.saleClientName) els.saleClientName.value = "";
     showToast("Vente enregistrée.", "success");
     await refreshAll();
   } catch (err) {

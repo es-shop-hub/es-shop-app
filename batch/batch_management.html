@@ -118,6 +118,10 @@ form-action 'self';
         <input type="number" id="saleAmount" min="0" step="0.01" placeholder="150.00">
       </div>
       <div class="full">
+        <label for="saleClientName">Nom client</label>
+        <input type="text" id="saleClientName" maxlength="80" placeholder="Nom client" autocomplete="off" required>
+      </div>
+      <div class="full">
         <label for="saleReason">Raison</label>
         <select id="saleReason">
           <option value="sale">Vente</option>

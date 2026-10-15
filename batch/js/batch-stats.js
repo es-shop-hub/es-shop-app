@@ -19,8 +19,10 @@ let products = [];
 let productsMap = {};
 
 const els = {
-  kpiMargin: document.getElementById("kpiMargin"),
   kpiCollected: document.getElementById("kpiCollected"),
+  kpiCostConsumed: document.getElementById("kpiCostConsumed"),
+  kpiCostEngaged: document.getElementById("kpiCostEngaged"),
+  kpiBenefitDisplay: document.getElementById("kpiBenefitDisplay"),
   kpiQtyOut: document.getElementById("kpiQtyOut"),
   kpiStock: document.getElementById("kpiStock"),
   filterProduct: document.getElementById("filterProduct"),
@@ -66,8 +68,16 @@ function fillProductFilter() {
 }
 
 function renderKpis(stats) {
-  if (els.kpiMargin) els.kpiMargin.textContent = formatMoney(stats.totalMargin);
   if (els.kpiCollected) els.kpiCollected.textContent = formatMoney(stats.totalCollected);
+  if (els.kpiCostConsumed) {
+    els.kpiCostConsumed.textContent = formatMoney(stats.totalCostConsumed || 0);
+  }
+  if (els.kpiCostEngaged) {
+    els.kpiCostEngaged.textContent = formatMoney(stats.totalCostEngaged || 0);
+  }
+  if (els.kpiBenefitDisplay) {
+    els.kpiBenefitDisplay.textContent = formatMoney(stats.benefitDisplay || 0);
+  }
   if (els.kpiQtyOut) els.kpiQtyOut.textContent = String(stats.totalQtyOut);
   if (els.kpiStock) els.kpiStock.textContent = String(stats.totalStockRemaining);
 }
@@ -116,7 +126,7 @@ function renderBatchTable(rows) {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 6;
+    td.colSpan = 7;
     td.className = "empty-state";
     td.textContent = "Aucun lot.";
     tr.appendChild(td);
@@ -141,7 +151,7 @@ function renderBatchTable(rows) {
       `${row.quantity_remaining}/${row.quantity_initial}`,
       String(row.qty_out),
       formatMoney(row.collected),
-      formatMoney(row.margin)
+      formatMoney(row.benefitDisplay ?? row.margin)
     ];
 
     tr.appendChild(nameTd);
@@ -189,10 +199,11 @@ function renderMovements(movements) {
     sub.textContent = [
       `Encaissé : ${formatMoney(m.amount_collected)}`,
       `Marge : ${formatMoney(m.profit_real)}`,
+      m.clientName ? `Client : ${m.clientName}` : null,
       `Lot : ${(m.batchId || "").slice(0, 10)}…`,
       `Raison : ${m.reason || "sale"}`,
       formatDate(m.createdAt)
-    ].join(" • ");
+    ].filter(Boolean).join(" • ");
 
     info.append(title, sub);
     row.appendChild(info);

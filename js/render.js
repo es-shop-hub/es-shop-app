@@ -7,8 +7,6 @@ import {
   getDate,
   loadPreviousPeriodData
 } from "./stats.js";
-import { getExpiringAlerts } from "./expiration.js";
-
 function setText(id, text) {
   const el = $(id);
   if (el) {
@@ -64,7 +62,11 @@ export async function render(chartApi) {
     losses,
     products: state.products,
     stockMovements: state.stockMovements,
-    currency: state.currency
+    batchMovements: state.batchMovements || [],
+    batchBatches: state.batchBatches || [],
+    batchStats: state.batchStats,
+    currency: state.currency,
+    previousPeriod: null
   };
 
   let previousPeriod = {
@@ -77,6 +79,10 @@ export async function render(chartApi) {
     previousPeriod = await loadPreviousPeriodData();
   } catch (error) {
     console.error("loadPreviousPeriodData:", error);
+  }
+
+  if (window.statsData) {
+    window.statsData.previousPeriod = previousPeriod;
   }
 
   renderKPIs(
@@ -96,7 +102,6 @@ export async function render(chartApi) {
   renderPurchases();
   renderProducts();
   renderSellers(sales, state.saleItems);
-  renderAlerts();
   renderActivity();
 
   if (state.chartReady && chartApi?.renderChart) {
@@ -358,6 +363,58 @@ function renderPurchases() {
   }
 }
 
+function getBatchPeriodStats(sales) {
+  const batchStats = state.batchStats || {
+    totalCollected: 0,
+    benefitDisplay: 0,
+    stockValue: 0,
+    totalCostEngaged: 0,
+    totalQtyOut: 0
+  };
+
+  const saleDates = sales.map(s => getDate(s.createdAt)).filter(Boolean);
+  let start = null;
+  let end = null;
+  if (saleDates.length) {
+    start = new Date(Math.min(...saleDates.map(d => d.getTime())));
+    end = new Date(Math.max(...saleDates.map(d => d.getTime())));
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  const movements = state.batchMovements || [];
+  const inPeriod = movements.filter(m => {
+    if (!start || !end) return true;
+    const d = getDate(m.createdAt);
+    if (!d) return false;
+    return d >= start && d <= end;
+  });
+
+  const collected = inPeriod.reduce(
+    (s, m) => s + n(m.amount_collected),
+    0
+  );
+  const qtyOut = inPeriod.reduce((s, m) => s + n(m.quantity_out), 0);
+  const stockValue = n(batchStats.stockValue ?? batchStats.totalCostEngaged);
+  const costEngaged = stockValue;
+  const costConsumed = inPeriod.reduce((s, m) => {
+    const batch = (state.batchBatches || []).find(b => b.id === m.batchId);
+    const unit = n(batch?.cost_unit_avg);
+    return s + unit * n(m.quantity_out);
+  }, 0);
+  const benefitRaw = collected - (costConsumed + costEngaged);
+  const benefitDisplay = Math.max(0, benefitRaw);
+
+  return {
+    collected,
+    benefitDisplay,
+    stockValue,
+    qtyOut,
+    costConsumed,
+    costEngaged
+  };
+}
+
 function renderKPIs(
   sales,
   expenses,
@@ -371,39 +428,65 @@ function renderKPIs(
   const filteredItems =
     state.saleItems.filter(i => saleIds.has(i.saleId));
 
-  const totalSales =
+  const classicSales =
     filteredItems.reduce(
       (s, i) =>
         s + (n(i.price) * n(i.quantity)),
       0
     );
 
-  const grossProfit =
+  const classicGrossProfit =
     filteredItems.reduce(
       (s, i) => s + n(i.profit),
       0
     );
 
-  const totalExpenses =
-    expenses.reduce((sum, e) =>
-      sum + n(e.amount), 0
-    );
+  const batchPeriod = getBatchPeriodStats(sales);
+
+  const totalSales = classicSales + batchPeriod.collected;
+  const realProfitTotal = classicGrossProfit + batchPeriod.benefitDisplay;
+
+  const expensesNoInvest = expenses
+    .filter(e => e.category !== "investment")
+    .reduce((sum, e) => sum + n(e.amount), 0);
 
   const totalLossesPeriod =
     losses
       .filter(e => e.isSystemCorrection !== true && e.status !== "cancelled")
       .reduce((sum, e) => sum + n(e.amount), 0);
 
-  const realProfit = grossProfit - totalExpenses - totalLossesPeriod;
+  const profitNoInvestTotal =
+    realProfitTotal - expensesNoInvest - totalLossesPeriod;
+
+  const classicStockValue = (state.products || []).reduce((s, p) => {
+    const price = n(p.price_buy || p.purchase_price);
+    return s + n(p.stock_current) * price;
+  }, 0);
+
+  const stockTotal = classicStockValue + batchPeriod.stockValue;
+
+  const classicSoldQty = filteredItems.reduce((s, i) => s + n(i.quantity), 0);
+  const classicStockQty = (state.products || []).reduce(
+    (s, p) => s + n(p.stock_current),
+    0
+  );
+  const batchStockQty = (state.batchBatches || [])
+    .filter(b => b.status !== "cancelled")
+    .reduce((s, b) => s + n(b.quantity_remaining), 0);
+
+  const soldQtyTotal = classicSoldQty + batchPeriod.qtyOut;
+  const stockQtyTotal = classicStockQty + batchStockQty;
+  const rotationTotal =
+    stockQtyTotal > 0 ? (soldQtyTotal / stockQtyTotal).toFixed(2) : "0";
 
   const basket =
     sales.length
-      ? totalSales / sales.length
+      ? classicSales / sales.length
       : 0;
 
   const marginRate =
-    totalSales > 0
-      ? (grossProfit / totalSales) * 100
+    classicSales > 0
+      ? (classicGrossProfit / classicSales) * 100
       : 0;
 
   const previousSaleIds = new Set(previousSales.map(s => s.id));
@@ -423,29 +506,19 @@ function renderKPIs(
       0
     );
 
-  const prevExpensesTotal =
-    previousExpenses.reduce(
-      (sum, e) => sum + n(e.amount),
-      0
-    );
+  const prevExpensesNoInvest =
+    previousExpenses
+      .filter(e => e.category !== "investment")
+      .reduce((sum, e) => sum + n(e.amount), 0);
 
   const prevLossesTotal =
     previousLosses
       .filter(e => e.isSystemCorrection !== true && e.status !== "cancelled")
       .reduce((sum, e) => sum + n(e.amount), 0);
 
-  const prevProfitTotal =
-    prevGrossProfit - prevExpensesTotal - prevLossesTotal;
-
-  const prevBasket =
-    previousSales.length
-      ? prevSalesTotal / previousSales.length
-      : 0;
-
-  const prevMargin =
-    prevSalesTotal > 0
-      ? (prevGrossProfit / prevSalesTotal) * 100
-      : 0;
+  const prevProfitTotal = prevGrossProfit;
+  const prevProfitNoInvest =
+    prevGrossProfit - prevExpensesNoInvest - prevLossesTotal;
 
   const calcTrend = (current, previous) => {
     if (previous === null || previous === undefined) {
@@ -458,14 +531,38 @@ function renderKPIs(
   };
 
   const salesTrendValue = calcTrend(totalSales, prevSalesTotal);
-  const profitTrendValue = calcTrend(realProfit, prevProfitTotal);
-  const basketTrendValue = calcTrend(basket, prevBasket);
-  const marginTrendValue = calcTrend(marginRate, prevMargin);
+  const profitTrendValue = calcTrend(realProfitTotal, prevProfitTotal);
+  const profitNoInvestTrendValue = calcTrend(
+    profitNoInvestTotal,
+    prevProfitNoInvest
+  );
 
   setText("salesValue", formatMoney(totalSales));
-  setText("profitValue", formatMoney(realProfit));
+  setText("profitValue", formatMoney(realProfitTotal));
+  setText("profitNoInvestValue", formatMoney(profitNoInvestTotal));
+  setText("stockTotalValue", formatMoney(stockTotal));
+  setText("rotationTotalValue", String(rotationTotal));
+  setText(
+    "salesBreakdown",
+    `Classique ${formatMoney(classicSales)} · Batch ${formatMoney(batchPeriod.collected)}`
+  );
+  setText(
+    "profitBreakdown",
+    `Classique ${formatMoney(classicGrossProfit)} · Batch ${formatMoney(batchPeriod.benefitDisplay)}`
+  );
+  setText(
+    "stockTotalBreakdown",
+    `Classique ${formatMoney(classicStockValue)} · Batch ${formatMoney(batchPeriod.stockValue)}`
+  );
+
+  setText("classicCaValue", formatMoney(classicSales));
+  setText("classicProfitValue", formatMoney(classicGrossProfit));
   setText("basketValue", formatMoney(basket));
   setText("marginValue", `${marginRate.toFixed(1)}%`);
+  setText("batchCollectedValue", formatMoney(batchPeriod.collected));
+  setText("batchBenefitValue", formatMoney(batchPeriod.benefitDisplay));
+  setText("batchStockValue", formatMoney(batchPeriod.stockValue));
+  setText("classicStockValue", formatMoney(classicStockValue));
 
   const updateTrend = (id, value) => {
     const el = $(id);
@@ -488,8 +585,7 @@ function renderKPIs(
 
   updateTrend("salesTrend", salesTrendValue);
   updateTrend("profitTrend", profitTrendValue);
-  updateTrend("basketTrend", basketTrendValue);
-  updateTrend("marginTrend", marginTrendValue);
+  updateTrend("profitNoInvestTrend", profitNoInvestTrendValue);
 }
 
 function renderProducts() {
@@ -754,88 +850,6 @@ function renderSellers(sales, saleItems) {
     appendEmpty(boxWeak, `Aucun vendeur < ${SELLER_SHARE_THRESHOLD}% des ventes`);
   } else {
     renderList(boxWeak, weakSellers, "badge-orange");
-  }
-}
-
-function renderAlerts() {
-  const expenseEl = $("expenseAlertText");
-
-  if (expenseEl) {
-    const expenses = state.expenses;
-
-    const totalExpenses = expenses.reduce(
-      (sum, e) => sum + n(e.amount),
-      0
-    );
-
-    const avgExpense = expenses.length
-      ? totalExpenses / expenses.length
-      : 0;
-
-    const abnormalExpenses = expenses.filter(
-      e => n(e.amount) > (avgExpense * 2)
-    );
-
-    expenseEl.textContent = abnormalExpenses.length
-      ? `${abnormalExpenses.length} Dépense(s) supérieure(s) à la moyenne`
-      : "Aucune Dépense anormale détectée";
-  }
-
-  const businessEl = $("businessAlertText");
-
-  if (businessEl) {
-    const lowStockCount = state.products.filter(
-      p => n(p.stock_current) <= 5
-    ).length;
-
-    const outOfStockCount = state.products.filter(
-      p => n(p.stock_current) <= 0
-    ).length;
-
-    const debtCount = state.debts.filter(
-      e =>
-        e.status !== "paid" &&
-        n(e.amount_remaining) > 0
-    ).length;
-
-    const messages = [];
-
-    if (outOfStockCount > 0) {
-      messages.push(`${outOfStockCount} produit(s) en rupture`);
-    }
-
-    if (lowStockCount > 0) {
-      messages.push(`${lowStockCount} produit(s) à réapprovisionner`);
-    }
-
-    if (debtCount > 0) {
-      messages.push(`${debtCount} dette(s) à recouvrer`);
-    }
-
-    if (state.config?.enableExpiration) {
-      const alertDays = state.config?.expirationAlertDays ?? 30;
-      const { expiringSoonCount, expiredCount } = getExpiringAlerts(
-        state.products,
-        state.stockMovements,
-        alertDays
-      );
-
-      if (expiringSoonCount > 0) {
-        messages.push(
-          `${expiringSoonCount} produit(s) expirent dans ${alertDays} jours`
-        );
-      }
-
-      if (expiredCount > 0) {
-        messages.push(
-          `${expiredCount} lot(s) expiré(s) en stock`
-        );
-      }
-    }
-
-    businessEl.textContent = messages.length
-      ? messages.join(" • ")
-      : "Aucune opportunité particulière détectée";
   }
 }
 

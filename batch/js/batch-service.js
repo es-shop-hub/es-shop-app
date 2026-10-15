@@ -234,15 +234,18 @@ export async function recordBatchSale({
   batchId,
   quantityOut,
   amountCollected,
-  reason = "sale"
+  reason = "sale",
+  clientName = ""
 }, userId) {
   const qtyOut = parsePositiveInt(quantityOut);
   const amount = parsePositiveNumber(amountCollected, { allowZero: true });
   const cleanReason = sanitizeText(reason, 40) || "sale";
+  const cleanClientName = sanitizeText(clientName || "", 80);
 
   if (!batchId) throw new Error("Lot requis.");
   if (!qtyOut) throw new Error("Quantité vendue invalide.");
   if (amount === null) throw new Error("Montant encaissé invalide.");
+  if (!cleanClientName) throw new Error("Nom client requis.");
 
   const batchRef = doc(db, BATCH_COLLECTIONS.BATCHES, batchId);
   const movementsRef = collection(db, BATCH_COLLECTIONS.MOVEMENTS);
@@ -287,6 +290,7 @@ export async function recordBatchSale({
       amount_collected: amount,
       profit_real: profitReal,
       reason: cleanReason,
+      clientName: cleanClientName,
       createdAt: Timestamp.now(),
       createdBy: userId
     });
@@ -324,6 +328,8 @@ export function aggregateBatchStats(batches, movements, productsMap) {
   let totalCollected = 0;
   let totalQtyOut = 0;
   let totalStockRemaining = 0;
+  let totalCostConsumed = 0;
+  let totalCostEngaged = 0;
 
   const byProduct = {};
   const byBatch = {};
@@ -331,20 +337,29 @@ export function aggregateBatchStats(batches, movements, productsMap) {
   batches.forEach(batch => {
     if (batch.status === BATCH_STATUS.CANCELLED) return;
 
-    totalStockRemaining += batch.quantity_remaining || 0;
+    const qtyRem = batch.quantity_remaining || 0;
+    const costUnit = Number(batch.cost_unit_avg) || 0;
+    const costEngaged = round2(qtyRem * costUnit);
+
+    totalStockRemaining += qtyRem;
+    totalCostEngaged = round2(totalCostEngaged + costEngaged);
 
     byBatch[batch.id] = {
       batchId: batch.id,
       productId: batch.productId,
       productName: productsMap[batch.productId]?.name || batch.productId,
       quantity_initial: batch.quantity_initial,
-      quantity_remaining: batch.quantity_remaining,
+      quantity_remaining: qtyRem,
       cost_total: batch.cost_total,
-      cost_unit_avg: batch.cost_unit_avg,
+      cost_unit_avg: costUnit,
       status: batch.status,
       margin: 0,
       collected: 0,
-      qty_out: 0
+      qty_out: 0,
+      costConsumed: 0,
+      costEngaged,
+      benefitRaw: 0,
+      benefitDisplay: 0
     };
 
     if (!byProduct[batch.productId]) {
@@ -359,10 +374,8 @@ export function aggregateBatchStats(batches, movements, productsMap) {
       };
     }
 
-    if (batch.status !== BATCH_STATUS.CANCELLED) {
-      byProduct[batch.productId].stock_remaining += batch.quantity_remaining || 0;
-      byProduct[batch.productId].batch_count += 1;
-    }
+    byProduct[batch.productId].stock_remaining += qtyRem;
+    byProduct[batch.productId].batch_count += 1;
   });
 
   movements.forEach(m => {
@@ -375,9 +388,13 @@ export function aggregateBatchStats(batches, movements, productsMap) {
     totalQtyOut += qty;
 
     if (byBatch[m.batchId]) {
-      byBatch[m.batchId].margin = round2(byBatch[m.batchId].margin + margin);
-      byBatch[m.batchId].collected = round2(byBatch[m.batchId].collected + collected);
-      byBatch[m.batchId].qty_out += qty;
+      const batchRow = byBatch[m.batchId];
+      batchRow.margin = round2(batchRow.margin + margin);
+      batchRow.collected = round2(batchRow.collected + collected);
+      batchRow.qty_out += qty;
+      batchRow.costConsumed = round2(
+        batchRow.qty_out * (Number(batchRow.cost_unit_avg) || 0)
+      );
     }
 
     if (!byProduct[m.productId]) {
@@ -397,12 +414,37 @@ export function aggregateBatchStats(batches, movements, productsMap) {
     byProduct[m.productId].qty_out += qty;
   });
 
+  Object.values(byBatch).forEach(row => {
+    if (!row.costConsumed && row.qty_out) {
+      row.costConsumed = round2(
+        row.qty_out * (Number(row.cost_unit_avg) || 0)
+      );
+    }
+    totalCostConsumed = round2(totalCostConsumed + (row.costConsumed || 0));
+    const costTotalLot = round2(
+      (row.costConsumed || 0) + (row.costEngaged || 0)
+    );
+    row.benefitRaw = round2((row.collected || 0) - costTotalLot);
+    row.benefitDisplay = Math.max(0, row.benefitRaw);
+  });
+
+  const totalCostLot = round2(totalCostConsumed + totalCostEngaged);
+  const benefitRaw = round2(totalCollected - totalCostLot);
+  const benefitDisplay = Math.max(0, benefitRaw);
+
   return {
     totalMargin,
     totalCollected,
     totalQtyOut,
     totalStockRemaining,
+    totalCostConsumed,
+    totalCostEngaged,
+    benefitRaw,
+    benefitDisplay,
+    stockValue: totalCostEngaged,
     byProduct: Object.values(byProduct).sort((a, b) => b.margin - a.margin),
-    byBatch: Object.values(byBatch).sort((a, b) => b.margin - a.margin)
+    byBatch: Object.values(byBatch).sort(
+      (a, b) => b.benefitDisplay - a.benefitDisplay
+    )
   };
 }

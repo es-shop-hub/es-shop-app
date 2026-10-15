@@ -73,7 +73,7 @@ bindFormAction(signupForm, async () => {
       userId: uid,
       name: fullName,
       email,
-      role: "seller",
+      role: "user",
       isActive,
       createdAt: Timestamp.now()
     });

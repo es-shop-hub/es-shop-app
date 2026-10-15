@@ -28,6 +28,7 @@ import {
 import { getAuth, onAuthStateChanged } from "./auth.js";
 import { generateReceipt } from "./receipt.js";
 import { bindActionButton } from "./utils/buttonManager.js";
+import { upsertClientByName } from "./clients-service.js";
 
 
 // --- DOM ---
@@ -96,6 +97,18 @@ function togglePaymentInput() {
   if (!isPartial) {
     amountPaidInput.value = "";
   }
+}
+
+function resetSaleFormUI() {
+  cart = [];
+  updateCartUI();
+  if (clientNameInput) clientNameInput.value = "";
+  if (paymentType) paymentType.value = "paid";
+  if (amountPaidInput) {
+    amountPaidInput.value = "";
+    amountPaidInput.style.display = "none";
+  }
+  togglePaymentInput();
 }
 
 // INIT
@@ -965,6 +978,14 @@ async function processSaleOnline(data) {
     }
   });
 
+  try {
+    await upsertClientByName(name, finalSellerId, {
+      lastSaleAt: Timestamp.fromMillis(saleDate)
+    });
+  } catch (err) {
+    console.warn("upsertClientByName:", err);
+  }
+
   // =========================
   // RETURN
   // =========================
@@ -1050,8 +1071,7 @@ bindActionButton(sellBtn, async () => {
         offline: true
       };
 
-      cart = [];
-      updateCartUI();
+      resetSaleFormUI();
 
       try {
         await generateReceipt(receiptData);
@@ -1072,15 +1092,14 @@ bindActionButton(sellBtn, async () => {
 
     if (!saleId) return;
 
-    // ⚡ reset cart PLUS TÔT (UX fluide)
+    // ⚡ reset formulaire PLUS TÔT (UX fluide)
     const receiptItems = cart.map(i => ({
       name: i.name,
       qty: i.qty,
       price: i.price
     }));
 
-    cart = [];
-    updateCartUI();
+    resetSaleFormUI();
 
     try {
       await generateReceipt({

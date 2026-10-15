@@ -6,11 +6,19 @@ import {
   getDocs,
   query,
   where,
-  orderBy
+  orderBy,
+  updateDoc,
+  writeLog,
+  Timestamp
 } from "./firebase.js";
 
 import { auth, onAuthStateChanged } from "./auth.js";
 import { getAppConfig } from "./appConfig.js";
+import {
+  sanitizeClientName,
+  upsertClientByName
+} from "./clients-service.js";
+import { bindActionButton } from "./utils/buttonManager.js";
 
 const $ = id => document.getElementById(id);
 
@@ -495,7 +503,7 @@ function renderKpis(rows) {
   $("resultCount").textContent = String(rows.length);
 }
 
-function createSaleCard(row) {
+function createSaleCard(row, showClientEdit = false) {
   const card = document.createElement("div");
   card.className = "sale-card";
 
@@ -563,7 +571,60 @@ function createSaleCard(row) {
   card.appendChild(dateMeta);
   card.appendChild(badge);
 
+  if (showClientEdit && row.saleStatus !== "cancelled" && row.saleId) {
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn-edit-client";
+    editBtn.id = `editClient_${row.saleId}`;
+    editBtn.textContent = "Modifier client";
+    editBtn.style.cssText =
+      "margin-top:8px;padding:6px 10px;border-radius:8px;border:1px solid rgba(212,175,55,0.5);background:#1a1a1a;color:#D4AF37;font-size:12px;cursor:pointer;";
+    bindActionButton(editBtn, async () => {
+      await editSaleClientName(row.saleId, row.clientName);
+    });
+    card.appendChild(editBtn);
+  }
+
   return card;
+}
+
+async function editSaleClientName(saleId, currentName) {
+  if (!saleId) return;
+
+  const next = window.prompt(
+    "Nom du client pour cette vente :",
+    currentName || ""
+  );
+  if (next == null) return;
+
+  const name = sanitizeClientName(next);
+  if (!name) {
+    alert("Nom client invalide.");
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, "sales", saleId), {
+      clientName: name,
+      updatedAt: Timestamp.now()
+    });
+
+    await upsertClientByName(name, currentUser?.uid || currentUser?.userId || "", {
+      lastSaleAt: Timestamp.now()
+    });
+
+    await writeLog({
+      userId: currentUser?.uid || currentUser?.userId || "",
+      action: "sale_client_update",
+      targetId: saleId,
+      details: { clientName: name, previous: currentName || "" }
+    });
+
+    await loadData();
+  } catch (err) {
+    console.error(err);
+    alert(err.message || "Impossible de modifier le client.");
+  }
 }
 
 function render() {
@@ -585,8 +646,11 @@ function render() {
   }
 
   const fragment = document.createDocumentFragment();
+  const editedSales = new Set();
   rows.forEach(row => {
-    fragment.appendChild(createSaleCard(row));
+    const showEdit = row.saleId && !editedSales.has(row.saleId);
+    if (showEdit) editedSales.add(row.saleId);
+    fragment.appendChild(createSaleCard(row, showEdit));
   });
 
   container.appendChild(fragment);

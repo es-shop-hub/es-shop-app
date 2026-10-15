@@ -44,12 +44,20 @@ form-action 'self';
 
   <div class="kpi-grid">
     <div class="kpi-card">
-      <div class="kpi-label">Marge totale</div>
-      <div class="kpi-value" id="kpiMargin">0,00</div>
-    </div>
-    <div class="kpi-card">
       <div class="kpi-label">Montant encaissé</div>
       <div class="kpi-value" id="kpiCollected">0,00</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Coût consommé</div>
+      <div class="kpi-value" id="kpiCostConsumed">0,00</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Capital engagé (stock)</div>
+      <div class="kpi-value" id="kpiCostEngaged">0,00</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Bénéfice affiché</div>
+      <div class="kpi-value" id="kpiBenefitDisplay">0,00</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Quantité vendue</div>
@@ -90,7 +98,7 @@ form-action 'self';
             <th>Stock</th>
             <th>Qté vendue</th>
             <th>Encaissé</th>
-            <th>Marge</th>
+            <th>Bénéfice</th>
             <th>Lot</th>
           </tr>
         </thead>

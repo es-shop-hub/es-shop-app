@@ -169,6 +169,14 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    match /clients/{id} {
+      allow read, write: if signedIn();
+    }
+
+    match /client_rewards/{id} {
+      allow read, write: if signedIn();
+    }
+
     // ── Config ───────────────────────────────────────────────────────────────
     match /appConfig/{id} {
       allow read: if signedIn();
