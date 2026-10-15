@@ -227,6 +227,8 @@ bindActionButton(document.getElementById("addExpenseBtn"), async () => {
       type,
       relatedTo: relatedTo || null,
       note: note || "",
+      isSystemCorrection: false,
+      status: "active",
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
       createdBy: currentUserId

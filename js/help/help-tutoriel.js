@@ -1,129 +1,301 @@
+/** Tutoriels alignés sur le tiroir (nav.js) et les pages réelles. */
 export const HELP_TUTORIALS = [
+  // —— Vente ——
   {
     id: "vente",
-    title: "Vente",
+    section: "Vente",
+    title: "Vente rapide",
     page: "index.html",
-    role: "Enregistrer les ventes au quotidien, encaisser et générer automatiquement stock et dettes.",
-    howTo: "Ouvrez la page Vente, ajoutez des produits au panier, renseignez le client, choisissez le mode de paiement puis validez.",
-    todo: "Saisir le nom du client, vérifier les quantités, respecter le prix minimum et confirmer chaque vente le jour même.",
-    body: "Cliquez sur un produit pour l'ajouter au panier. Ajustez les quantités et les prix si vous êtes autorisé. Choisissez « Paiement total » ou « Paiement partiel » pour une dette client. Chaque vente crée une fiche dans sales, des lignes dans sale_items et un mouvement OUT dans stock_movements. Les produits périssables utilisent le FIFO : les lots expirés ne peuvent pas être vendus."
+    role: "Enregistrer les ventes du jour : panier, client, cash ou crédit.",
+    howTo:
+      "Ajoutez des produits au panier, saisissez le nom du client, puis choisissez Vendre (cash) ou Crédit. En crédit, indiquez éventuellement le montant payé et confirmez.",
+    todo:
+      "Toujours renseigner le client, respecter le prix minimum, valider chaque vente le jour même.",
+    body:
+      "Cash : vente soldée. Crédit : crée une dette client (payment_status partial/paid). Chaque vente écrit sales, sale_items et un OUT dans stock_movements. Les lots périssables suivent le FIFO."
   },
   {
     id: "vendus",
+    section: "Vente",
     title: "Vendus",
     page: "vendus.html",
-    role: "Consulter l'historique détaillé des ventes par période, vendeur, produit et statut.",
-    howTo: "Choisissez une période (Aujourd'hui par défaut), appliquez les filtres puis consultez les cartes et les KPIs.",
-    todo: "Vérifier chaque jour les ventes du jour, filtrer par vendeur si besoin et contrôler les dettes encore ouvertes.",
-    body: "Les filtres interrogent Firestore directement : dates, vendeur, paiement, statut et produit. Par défaut, la page affiche les ventes d'aujourd'hui. Les vendeurs ne voient que leurs propres ventes. Utilisez « Réinitialiser » pour revenir à la journée en cours."
+    role: "Historique des ventes filtrable (période, vendeur, produit, statut).",
+    howTo:
+      "Choisissez une période (Aujourd'hui par défaut), appliquez les filtres, consultez les cartes et KPIs.",
+    todo:
+      "Contrôler les ventes du jour, les dettes ouvertes, et annuler une erreur seulement si elle a moins de 48 h (triple confirmation).",
+    body:
+      "Les vendeurs ne voient que leurs ventes. Annulation ≤ 48 h : stock rétabli via correction. Liens croisés vers Clients et Ranking."
   },
   {
+    id: "clients",
+    section: "Vente",
+    title: "Clients",
+    page: "clients.html",
+    role: "Registre clients : apport, récurrents, top 5, récompenses et détail.",
+    howTo:
+      "Filtrez par période ou nom, consultez les KPIs, ouvrez une fiche client pour le détail et les récompenses.",
+    todo:
+      "Vérifier les clients récurrents, enregistrer les récompenses du mois, croiser avec Vendus et Stats.",
+    body:
+      "Les ventes se lient par le nom (clients.nameKey ↔ sales.clientName). Pas de clientId sur sales. Page liée à Vendus et Statistiques."
+  },
+
+  // —— Stock ——
+  {
     id: "produits",
+    section: "Stock",
     title: "Produits",
     page: "products.html",
-    role: "Créer et maintenir le catalogue : prix, stock, alertes et options offline ou expiration.",
-    howTo: "Ajoutez un produit avec prix achat, vente et minimum. Indiquez le stock initial. Modifiez ou désactivez via la liste.",
-    todo: "Tenir les prix à jour, activer l'expiration si le produit est périssable, vérifier le stock affiché après chaque achat ou vente.",
-    body: "stock_current est un cache d'affichage — la vérité reste stock_movements. price_min bloque une vente en dessous du seuil. offlineBlocked et minOfflineStock protègent les ventes hors-ligne. Si l'expiration est activée dans Paramètres, cochez hasExpiration et renseignez la date du lot initial."
+    role: "Catalogue : prix, stock affiché, alertes, offline et expiration.",
+    howTo:
+      "Ajoutez un produit (prix achat, vente, minimum, stock). Modifiez ou désactivez depuis la liste. Liens vers Achats et Fournisseurs.",
+    todo:
+      "Tenir les prix à jour, activer l'expiration si périssable, contrôler le stock après achat/vente.",
+    body:
+      "stock_current est un cache — la vérité est stock_movements. price_min bloque les ventes trop basses. Liens croisés : Achats, Fournisseurs."
   },
   {
     id: "achats",
+    section: "Stock",
     title: "Achats",
     page: "purchases.html",
-    role: "Enregistrer les entrées stock fournisseur et mettre à jour les coûts d'achat.",
-    howTo: "Sélectionnez le produit, la quantité, le prix d'achat et validez. Corrigez le stock manuellement si nécessaire via le tableau.",
-    todo: "Saisir chaque réception fournisseur, renseigner la date d'expiration du lot si le produit est périssable, contrôler le bénéfice potentiel affiché.",
-    body: "Chaque achat crée purchases, purchase_items et un mouvement IN. Une dépense de réinvestissement peut être générée automatiquement. Le tableau affiche le bénéfice potentiel (prix min − prix achat). Seul le tableau défile horizontalement sur mobile."
+    role: "Entrées stock fournisseur et mise à jour des coûts.",
+    howTo:
+      "Renseignez le fournisseur, le produit, la quantité, le prix d'achat (et l'expiration du lot si besoin), puis validez.",
+    todo:
+      "Saisir chaque réception, nommer le fournisseur, renseigner l'expiration des lots périssables.",
+    body:
+      "Crée purchases, purchase_items et un IN dans stock_movements. Une dépense de réinvestissement peut être générée. Liens : Fournisseurs, Produits."
   },
   {
+    id: "fournisseurs",
+    section: "Stock",
+    title: "Fournisseurs",
+    page: "suppliers.html",
+    role: "Synthèse des achats par fournisseur : totaux, activité, accès rapide nouvel achat.",
+    howTo:
+      "Filtrez la période, consultez les cartes fournisseur et l'activité récente. Utilisez « Nouvel achat » pour ouvrir Achats.",
+    todo:
+      "Contrôler qui livre le plus, croiser avec Achats et Produits, suivre les dettes fournisseur via Dettes si besoin.",
+    body:
+      "Agrégation locale sur les commandes (purchases). Liens croisés : Achats, Produits."
+  },
+  {
+    id: "demande-ajout",
+    section: "Stock",
+    title: "Demande client",
+    page: "demandes/demand_add.html",
+    role: "Noter un produit demandé absent du catalogue.",
+    howTo:
+      "Saisissez le libellé (et une note optionnelle), enregistrez. Les doublons incrémentent le compteur.",
+    todo:
+      "Enregistrer chaque demande réelle, puis créer le produit ou l'acheter quand c'est prioritaire.",
+    body:
+      "Collection product_demands (labelKey pour dédoublonner). Voir aussi Stats demandes."
+  },
+  {
+    id: "demande-stats",
+    section: "Stock",
+    title: "Stats demandes",
+    page: "demandes/demand_stats.html",
+    role: "Voir quels produits absents sont le plus demandés.",
+    howTo:
+      "Consultez le classement des demandes, marquez fulfilled ou ignored selon le traitement.",
+    todo:
+      "Prioriser les demandes fréquentes pour le prochain achat ou la création produit.",
+    body:
+      "Complète Demande client. Utile pour décider quoi ajouter au catalogue."
+  },
+
+  // —— Finances ——
+  {
     id: "finances",
-    title: "Finances (hub)",
+    section: "Finances",
+    title: "Hub finances",
     page: "finances.html",
-    role: "Point central vers Dépenses, Dettes et Pertes avec vue d'ensemble des alertes.",
-    howTo: "Depuis cette page, ouvrez le module concerné : Dépenses, Dettes ou Pertes.",
-    todo: "Consulter régulièrement les alertes dettes, traiter les échéances et maintenir les trois modules à jour.",
-    body: "La page Finances regroupe l'accès aux charges, créances et pertes. Utilisez-la comme tableau de bord financier avant d'entrer dans le détail de chaque sous-page."
+    role: "Accès central Dépenses, Dettes et Pertes + alertes.",
+    howTo:
+      "Ouvrez le module voulu depuis les raccourcis du hub.",
+    todo:
+      "Passer par le hub avant le détail, traiter les alertes dettes rapidement.",
+    body:
+      "Tableau de bord financier léger. Les trois modules restent séparés (expenses, debts, losses)."
   },
   {
     id: "depenses",
+    section: "Finances",
     title: "Dépenses",
     page: "expenses.html",
-    role: "Suivre toutes les sorties d'argent : charges, investissements et réinvestissements.",
-    howTo: "Remplissez le formulaire (libellé, montant, catégorie, date), puis créez la dépense. Filtrez par période avec « Appliquer filtres ».",
-    todo: "Enregistrer chaque dépense réelle, classer correctement (salaire, loyer, investissement…), ne pas mélanger charge courante et investissement stock.",
-    body: "Les catégories investment et reinvestment servent au suivi des achats stock et réapprovisionnements. Les filtres date passent par Firestore. Modifiez une dépense via le bouton dédié si le montant était incorrect."
+    role: "Charges, investissements et réinvestissements.",
+    howTo:
+      "Libellé, montant, catégorie, date → créer. Filtrez par période avec Appliquer.",
+    todo:
+      "Classer correctement (salaire, loyer, investment, reinvestment…) ; ne pas mélanger charge et stock.",
+    body:
+      "investment / reinvestment alimentent le suivi stats (exclus du bénéfice opérationnel). Liens : Finances, Dettes, Pertes."
   },
   {
     id: "dettes",
+    section: "Finances",
     title: "Dettes",
     page: "debts.html",
-    role: "Gérer les créances clients et dettes fournisseurs avec échéances et paiements partiels.",
-    howTo: "Créez une dette (nom, montant total, montant payé, échéance). Enregistrez les paiements via le bouton Payer sur chaque ligne.",
-    todo: "Relancer les clients en retard, saisir l'échéance (J+7 par défaut), enregistrer chaque encaissement partiel dès réception.",
-    body: "Une dette liée à une vente (relatedSaleId) met à jour automatiquement le payment_status de la vente. Le bandeau « Suivi Dettes » résume retards, échéances du jour et montants restants. Montants : utilisez un point ou une virgule décimale."
+    role: "Créances clients et dettes fournisseurs, échéances et paiements.",
+    howTo:
+      "Créez une dette (nom, montants, échéance). Utilisez Payer sur chaque ligne pour un encaissement.",
+    todo:
+      "Relancer les retards, saisir l'échéance, enregistrer chaque paiement partiel dès réception.",
+    body:
+      "Une dette liée à une vente (relatedSaleId) met à jour payment_status. Liens : Finances, Dépenses."
   },
   {
     id: "pertes",
+    section: "Finances",
     title: "Pertes",
     page: "losses.html",
-    role: "Déclarer les pertes produit (casse, expiration) ou financières et corriger si erreur.",
-    howTo: "Choisissez le type de perte, le produit ou le montant, validez. Utilisez Corriger pour une perte produit enregistrée par erreur.",
-    todo: "Sortir le stock expiré via une perte produit (FIFO), documenter la raison, ne pas laisser le stock expiré en vente.",
-    body: "Une perte produit génère un mouvement OUT reason loss. Les produits périssables consomment les lots les plus anciens. Les pertes financières n'affectent pas le stock mais impactent les statistiques."
+    role: "Pertes produit (casse, expiration) ou argent.",
+    howTo:
+      "Choisissez le type, le produit ou le montant, validez. Corrigez une erreur via le bouton dédié.",
+    todo:
+      "Sortir le stock expiré en perte produit (FIFO), documenter la raison.",
+    body:
+      "Perte produit → OUT reason loss. Les pertes argent n'affectent pas le stock. Liens : Finances, Dépenses."
+  },
+
+  // —— Pilotage ——
+  {
+    id: "navigation",
+    section: "Pilotage",
+    title: "Navigation",
+    page: "pages.html",
+    role: "Hub de toutes les pages StockFlow.",
+    howTo:
+      "Ouvrez Navigation depuis le tiroir. Cliquez une carte pour aller au module.",
+    todo:
+      "Utiliser ce hub pour former les nouveaux utilisateurs et vérifier l'accès aux modules.",
+    body:
+      "Liste : Vente, Produits, Vendus, Clients, Stats, Vendeurs, Ranking, Demandes, Achats, Fournisseurs, Finances (Dépenses/Dettes/Pertes), Lots, Paramètres, Vue rapide, Aide, Quotas."
   },
   {
     id: "stats",
+    section: "Pilotage",
     title: "Statistiques",
     page: "stats.html",
-    role: "Analyser la performance : ventes, profits, dépenses, stock, dettes et alertes (admin).",
-    howTo: "Choisissez la période et le vendeur, consultez les KPIs et graphiques, exportez le PDF si besoin.",
-    todo: "Consulter au moins une fois par semaine, comparer les périodes, agir sur les alertes stock et expiration.",
-    body: "Réservé au rôle admin. Les chiffres proviennent de sales, sale_items, expenses, losses, purchases et stock_movements. Santé financière : dépenses hors investissement, investissements, réinvestissements et bénéfice potentiel au prix minimum."
+    role: "KPIs Totaux (classique + batch), tendances, finance opérationnelle et santé financière (admin).",
+    howTo:
+      "Choisissez la période, consultez Vue d'ensemble, Tendances (tuiles de courbes), puis Détail classique/batch et le suivi opérationnel.",
+    todo:
+      "Comparer les périodes chaque semaine, agir sur stock/expiration, croiser avec Ranking et Clients.",
+    body:
+      "Réservé admin. Sources : sales, sale_items, expenses, losses, purchases, stock_movements et module batch. Le bénéfice opérationnel exclut invest./réinvest."
   },
   {
-    id: "parametres",
-    title: "Paramètres",
-    page: "settings.html",
-    role: "Configurer la boutique, les utilisateurs, l'expiration produits et le mode offline.",
-    howTo: "Onglet Configuration : nom boutique, devise, alertes stock, expiration. Onglet Utilisateurs : créer admin ou seller, activer/désactiver.",
-    todo: "Limiter les accès seller, activer l'expiration si vous vendez des produits périssables, sauvegarder après chaque modification.",
-    body: "enableExpiration et expirationAlertDays contrôlent le module FIFO et les alertes dashboard. Chaque utilisateur Firebase doit avoir un document dans users avec le bon rôle. Ne partagez jamais les mots de passe admin."
+    id: "vendeurs",
+    section: "Pilotage",
+    title: "Vendeurs",
+    page: "vendeurs.html",
+    role: "Leaderboard vendeurs : parts CA / nombre de ventes, forts et faibles.",
+    howTo:
+      "Filtrez la période, lisez le classement et les blocs vendeurs forts / faibles.",
+    todo:
+      "Identifier qui sous-performe, former ou répartir les plages horaires.",
+    body:
+      "Agrégation sur sales (sellerId). Complète Stats et Ranking produits."
   },
   {
-    id: "utilisateurs",
-    title: "Utilisateurs",
-    page: "settings.html",
-    role: "Contrôler qui accède à StockFlow et avec quel niveau de permission (admin ou seller).",
-    howTo: "Dans Paramètres → Utilisateurs, créez un compte, assignez le rôle, activez ou désactivez l'accès.",
-    todo: "Un seller par point de vente si possible, révoquer l'accès des anciens employés, ne jamais laisser de compte inactif ouvert.",
-    body: "admin : accès Stats, Paramètres, toutes les ventes. seller : vente et modules autorisés, ventes limitées à son sellerId sur Vendus. Maximum 5 utilisateurs selon la configuration system/meta."
-  },
-  {
-    id: "navigation",
-    title: "Navigation (Menu)",
-    page: "pages.html",
-    role: "Accéder rapidement à toutes les pages du système depuis un seul écran.",
-    howTo: "Ouvrez pages.html depuis le lien Navigation ou le menu ☰ selon votre page d'accueil.",
-    todo: "Utiliser ce hub pour former les nouveaux utilisateurs et vérifier que chaque module est accessible.",
-    body: "La grille liste Vente, Produits, Vendus, Achats, Finances, Stats, Paramètres, Aide et Vue rapide. Idéal pour les administrateurs qui supervisent plusieurs modules."
+    id: "ranking",
+    section: "Pilotage",
+    title: "Ranking",
+    page: "ranging.html",
+    role: "Classement produits : volume, marge, CA et stock faible.",
+    howTo:
+      "Choisissez la période, parcourez les classements et les produits faibles.",
+    todo:
+      "Réapprovisionner les forts qui manquent, pousser ou retirer les faibles.",
+    body:
+      "Données sale_items + products. Liens croisés : Stats, Vendus, Clients."
   },
   {
     id: "loader",
+    section: "Pilotage",
     title: "Vue rapide",
     page: "loader.html",
-    role: "Aperçu synthétique des ventes, du stock et des finances sans ouvrir chaque module.",
-    howTo: "Ouvrez loader.html depuis le menu Navigation ou Stats selon votre configuration.",
-    todo: "Consultez en début de journée pour un état rapide avant d'entrer dans le détail des ventes.",
-    body: "Dashboard léger pour les vendeurs ou managers pressés. Complète Stats mais ne remplace pas une analyse approfondie."
+    role: "Aperçu synthétique ventes / stock / finances.",
+    howTo:
+      "Ouvrez Vue rapide depuis le tiroir (Pilotage).",
+    todo:
+      "Coup d'œil en début de journée avant d'entrer dans Stats ou Vendus.",
+    body:
+      "Dashboard léger. Ne remplace pas l'analyse Stats."
+  },
+
+  // —— Lots ——
+  {
+    id: "batch-gestion",
+    section: "Lots",
+    title: "Gestion lots",
+    page: "batch/batch_management.html",
+    role: "Module isolé : types de produits batch, lots et ventes fractionnées.",
+    howTo:
+      "Créez un type de produit batch, créez un lot (qté + coût), puis enregistrez des sorties (ventes) sur le lot.",
+    todo:
+      "Ne pas mélanger avec le catalogue classique (products). Suivre quantity_remaining et le statut du lot.",
+    body:
+      "Collections batch_products, product_batches, batch_movements — indépendantes de sales/stock_movements. Lien vers Stats lots."
+  },
+  {
+    id: "batch-stats",
+    section: "Lots",
+    title: "Stats lots",
+    page: "batch/batch_stats.html",
+    role: "Marge, encaissements et stock restant du module lots.",
+    howTo:
+      "Consultez les totaux agrégés des batch_movements et le stock des lots actifs.",
+    todo:
+      "Contrôler la marge réelle des ventes fractionnées, croiser avec Stats (Totaux).",
+    body:
+      "Montants arrondis à 2 décimales. Complète Gestion lots ; les Totaux Stats additionnent classique + batch."
+  },
+
+  // —— Système ——
+  {
+    id: "parametres",
+    section: "Système",
+    title: "Paramètres",
+    page: "settings.html",
+    role: "Boutique, devise, expiration, offline et utilisateurs (admin / seller).",
+    howTo:
+      "Onglet Configuration : nom, devise, alertes, expiration. Onglet Utilisateurs : créer, rôle, activer/désactiver.",
+    todo:
+      "Limiter les accès seller, activer l'expiration si périssables, sauvegarder après chaque changement.",
+    body:
+      "enableExpiration / expirationAlertDays pilotent le FIFO. users.role = admin|seller. Maximum d'utilisateurs selon system/meta. Ne jamais partager les mots de passe admin."
+  },
+  {
+    id: "billing",
+    section: "Système",
+    title: "Quotas & sécurité",
+    page: "billing-info/billing.html",
+    role: "Vue admin des quotas Firebase et rappel sécurité.",
+    howTo:
+      "Ouvrez Quotas & sécurité depuis le tiroir (admin).",
+    todo:
+      "Surveiller les limites projet, ne pas exposer de clés privées hors du client prévu.",
+    body:
+      "Page d'information opérationnelle. Les règles Firestore restent dans « firestore rulses.txt » (déploiement manuel Console)."
   },
   {
     id: "aide",
+    section: "Système",
     title: "Aide",
     page: "help.html",
-    role: "Guide complet StockFlow et présentation ES-Company.",
-    howTo: "Parcourez les tutoriels accordéon, lisez « Pourquoi StockFlow » et contactez le support si besoin.",
-    todo: "Former chaque nouvel utilisateur avec cette page avant la première vente réelle.",
-    body: "Un seul chapitre ouvert à la fois. Retrouvez ici la logique métier, les contacts et le lien vers le site ES-Company."
+    role: "Tutoriels par page, pourquoi StockFlow, contact ES-Company.",
+    howTo:
+      "Ouvrez un accordéon (un seul à la fois), lisez Comment utiliser / À faire, puis le détail.",
+    todo:
+      "Former chaque nouvel utilisateur ici avant la première vente réelle.",
+    body:
+      "Les tutoriels suivent les sections du tiroir. Contact et WhatsApp en bas de page."
   }
 ];
 
@@ -133,7 +305,7 @@ export const ES_COMPANY_ABOUT = {
   history:
     "Tout a commencé dans une boutique physique : gestion sur papier, calculs longs, stock difficile à suivre. En échangeant avec d'autres commerçants, la même problématique revenait — organisation, pas seulement visibilité web. StockFlow est né pour répondre à ce besoin concret, puis ES-Company est devenue le véhicule pour aider d'autres entreprises à se moderniser.",
   approach:
-    "Nous ne vendons pas des logiciels : nous construisons un écosystème numérique qui combine technologie, stratégie business, design professionnel et accompagnement pratique."
+    "Nous ne vendons pas seulement des logiciels : nous construisons un écosystème numérique qui combine technologie, stratégie business, design professionnel et accompagnement pratique."
 };
 
 export const STOCKFLOW_WHY = {
@@ -145,12 +317,13 @@ export const STOCKFLOW_WHY = {
     "Décisions prises au hasard"
   ],
   pointB: [
-    "Suivi clair des ventes en temps réel",
-    "Contrôle du stock via stock_movements",
+    "Suivi clair des ventes",
+    "Contrôle du stock",
     "Gestion des dépenses et des dettes",
-    "Réduction des pertes (dont expiration)",
-    "Statistiques lisibles pour décider",
-    "Entreprise plus organisée et rentable"
+    "Réduction des pertes",
+    "Statistiques simples à comprendre",
+    "Meilleure prise de décision",
+    "Entreprise plus organisée"
   ],
   promise:
     "StockFlow aide les commerçants à passer d'une gestion approximative sur papier à une gestion organisée et contrôlée, afin de mieux suivre leur argent, réduire les pertes et prendre de meilleures décisions.",

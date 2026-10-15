@@ -1,6 +1,6 @@
 {
-  "name": "TVD-SHOP :  StockFlow",
-  "short_name": "TVD-Shop",
+  "name": "ES-SHOP :  StockFlow",
+  "short_name": "Es-Shop",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

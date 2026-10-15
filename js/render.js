@@ -34,8 +34,12 @@ function getPurchaseTotal(purchase) {
     );
 }
 
+function activeSales(list) {
+  return (list || []).filter(s => (s.status || "active") !== "cancelled");
+}
+
 export async function render(chartApi) {
-  const sales = state.sales;
+  const sales = activeSales(state.sales);
   const expenses = state.expenses;
   const losses = state.losses;
 
@@ -75,7 +79,7 @@ export async function render(chartApi) {
     sales,
     expenses,
     losses,
-    previousPeriod.sales,
+    activeSales(previousPeriod.sales),
     previousPeriod.expenses,
     previousPeriod.losses
   );
@@ -186,8 +190,10 @@ function renderFinancialHealth(sales, expenses, losses) {
       0
     );
 
-  const grossProfit =
-    state.saleItems.reduce((s, i) => s + n(i.profit), 0);
+  const saleIds = new Set(sales.map(s => s.id));
+  const grossProfit = state.saleItems
+    .filter(i => saleIds.has(i.saleId))
+    .reduce((s, i) => s + n(i.profit), 0);
 
   const potentialMinProfit = calcPotentialMinProfit(state.products);
 

@@ -15,6 +15,63 @@ let offlineBanner = null;
 let isSyncing = false;
 let syncToast = null;
 
+const SYNC_LOCK_KEY = "offline_sync_lock_v1";
+const SYNC_LOCK_TTL_MS = 90000;
+
+function getTabSyncId() {
+  const key = "offline_sync_tab_id";
+  let id = sessionStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem(key, id);
+  }
+  return id;
+}
+
+function tryAcquireLocalSyncLock() {
+  const now = Date.now();
+  const owner = `${getDeviceId()}:${getTabSyncId()}`;
+
+  try {
+    const raw = localStorage.getItem(SYNC_LOCK_KEY);
+    if (raw) {
+      const lock = JSON.parse(raw);
+      if (
+        lock?.expiresAt > now &&
+        lock?.owner &&
+        lock.owner !== owner
+      ) {
+        return false;
+      }
+    }
+
+    localStorage.setItem(
+      SYNC_LOCK_KEY,
+      JSON.stringify({ owner, expiresAt: now + SYNC_LOCK_TTL_MS })
+    );
+
+    const verify = JSON.parse(localStorage.getItem(SYNC_LOCK_KEY) || "{}");
+    return verify?.owner === owner;
+  } catch (err) {
+    console.warn("sync lock:", err);
+    return true;
+  }
+}
+
+function releaseLocalSyncLock() {
+  try {
+    const owner = `${getDeviceId()}:${getTabSyncId()}`;
+    const raw = localStorage.getItem(SYNC_LOCK_KEY);
+    if (!raw) return;
+    const lock = JSON.parse(raw);
+    if (lock?.owner === owner) {
+      localStorage.removeItem(SYNC_LOCK_KEY);
+    }
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 /* =========================
    DEVICE ID
 ========================= */
@@ -464,105 +521,115 @@ export function addToQueue(action) {
 /* =========================
    SYNC
 ========================= */
-export async function syncQueue(handlers = {}) {
+async function runSyncQueue(handlers = {}) {
+  await new Promise(r => setTimeout(r, 1000));
 
+  const queue = getQueue();
+
+  if (!Array.isArray(queue) || !queue.length) {
+    console.log("✅ Queue vide");
+    return;
+  }
+
+  console.log(`🔄 Sync ${queue.length} action(s)`);
+
+  const remaining = [];
+
+  for (const action of queue) {
+    try {
+      if (!action || typeof action !== "object") {
+        continue;
+      }
+
+      const handler = handlers[action.type];
+
+      if (typeof handler !== "function") {
+        throw new Error(`Handler manquant: ${action.type}`);
+      }
+
+      if (action.retryCount && action.retryCount >= 5) {
+        console.warn(`⛔ Action ignorée (max retries): ${action.type}`, action.id);
+        showSyncToast(
+          `⛔ Sync abandonnée : ${action.type}`,
+          "error"
+        );
+        continue;
+      }
+
+      await handler({
+        ...action.data,
+        offlineActionId: action.id,
+        deviceId: action.deviceId
+      });
+
+      console.log(`✅ Sync OK: ${action.type}`);
+      showSyncToast(`✅ Sync OK : ${action.type}`, "success");
+    } catch (err) {
+      console.error("❌ Sync erreur:", err);
+      showSyncToast(`❌ Sync erreur : ${action.type}`, "error");
+
+      remaining.push({
+        ...action,
+        retryCount: (action.retryCount || 0) + 1,
+        lastRetryAt: Date.now(),
+        lastError: err?.message || "Erreur inconnue"
+      });
+    }
+  }
+
+  saveQueue(remaining);
+}
+
+export async function syncQueue(handlers = {}) {
   if (isOffline()) {
     console.warn("📴 Sync annulé offline");
     return;
   }
 
   if (isSyncing) {
-    console.warn("⚠️ Sync déjà en cours");
+    console.warn("⚠️ Sync déjà en cours (onglet)");
     return;
   }
 
-  isSyncing = true;
-
-   await new Promise(r =>
-  setTimeout(r, 1000)
-);
-
-  try {
-    const queue = getQueue();
-
-    if (!Array.isArray(queue) || !queue.length) {
-      console.log("✅ Queue vide");
+  const runWithLock = async () => {
+    if (!tryAcquireLocalSyncLock()) {
+      console.warn("⚠️ Sync déjà en cours (autre onglet)");
       return;
     }
-    console.log(
-      `🔄 Sync ${queue.length} action(s)`
-    );
 
-    const remaining = [];
-
-    for (const action of queue) {
-      try {
-        if (
-          !action ||
-          typeof action !== "object"
-        ) {
-          continue;
-        }
-        const handler =
-          handlers[action.type];
-
-        if (
-          typeof handler !== "function"
-        ) {
-          throw new Error(
-            `Handler manquant: ${action.type}`
-          );
-        }
-        if (
-          action.retryCount &&
-          action.retryCount >= 5
-        ) {
-          console.warn(
-            `⛔ Action ignorée: ${action.type}`
-          );
-          continue;
-        }
-        await handler({
-          ...action.data,
-          offlineActionId: action.id,
-          deviceId: action.deviceId
-        });
-
-        console.log(
-          `✅ Sync OK: ${action.type}`
-        );
-
-        showSyncToast(
-          `✅ Sync OK : ${action.type}`,
-          "success"
-        );
-      } catch (err) {
-
-        console.error(
-          "❌ Sync erreur:",
-          err
-        );
-
-        showSyncToast(
-          `❌ Sync erreur : ${action.type}`,
-          "error"
-        );
-
-        remaining.push({
-          ...action,
-          retryCount:
-            (action.retryCount || 0) + 1,
-          lastRetryAt: Date.now(),
-          lastError:
-            err?.message ||
-            "Erreur inconnue"
-        });
-      }
+    isSyncing = true;
+    try {
+      await runSyncQueue(handlers);
+    } finally {
+      isSyncing = false;
+      releaseLocalSyncLock();
     }
-    saveQueue(remaining);
-  } finally {
-    isSyncing = false;
+  };
+
+  if (typeof navigator !== "undefined" && navigator.locks?.request) {
+    try {
+      let acquired = false;
+
+      await navigator.locks.request(
+        "stockflow-offline-sync",
+        { ifAvailable: true },
+        async lock => {
+          if (!lock) return;
+          acquired = true;
+          await runWithLock();
+        }
+      );
+
+      if (!acquired) {
+        console.warn("⚠️ Sync déjà en cours (autre onglet / Web Lock)");
+      }
+      return;
+    } catch (err) {
+      console.warn("navigator.locks fallback:", err);
+    }
   }
+
+  await runWithLock();
 }
 
 /* =========================

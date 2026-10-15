@@ -212,6 +212,8 @@ if (currentUser?.role === "seller") {
   });
 }
 
+  sales = sales.filter(s => (s.status || "active") !== "cancelled");
+
   const stockValue = products.reduce((total, p) => {
     return total + (n(p.price_buy) * n(p.stock_current));
   }, 0);

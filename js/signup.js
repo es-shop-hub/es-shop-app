@@ -89,7 +89,7 @@ bindFormAction(signupForm, async () => {
     await writeLog({
       userId: uid,
       action: "signup",
-      details: { email, role: "seller" }
+      details: { email, role: "user" }
     });
 
     await signOut(auth);

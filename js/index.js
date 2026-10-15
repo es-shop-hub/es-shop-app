@@ -901,191 +901,170 @@ async function processSaleOnline(data) {
   }
 
   // =========================
-  // 1. STOCK (SEULE PARTIE CRITIQUE)
+  // 1. TRANSACTION ATOMIQUE
+  // stock + sale + sale_items + stock_movements (+ dette si partial)
   // =========================
-  await runTransaction(db, async (tx) => {
-
-  const productSnapshots = [];
-
-  // 1. READS ONLY
-  for (const item of cart) {
-
-    const ref = doc(db, "products", item.productId);
-
-    const snap = await tx.get(ref);
-
-    productSnapshots.push({
-      item,
-      ref,
-      snap
-    });
-  }
-
-  // 2. WRITES ONLY
-  for (const data of productSnapshots) {
-
-    const {
-      item,
-      ref,
-      snap
-    } = data;
-
-    if (!snap.exists()) {
-      throw new Error("Produit supprimé");
-    }
-
-    const stock =
-      snap.data().stock_current || 0;
-
-    if (stock < item.qty) {
-      throw new Error("Stock insuffisant");
-    }
-
-    tx.update(ref, {
-      stock_current: stock - item.qty
-    });
-  }
-
-  tx.set(saleRef, {
-  sellerId: finalSellerId,
-  clientName: name,
-  total_amount: totalAmount,
-  total_profit: totalProfit,
-  offlineActionId: offlineActionId || null,
-  deviceId: deviceId || null,
-  syncSource: offlineActionId ? "offline-sync" : "online",
-  status: "active",
-  ...payment,
-  createdAt: Timestamp.fromMillis(saleDate)
-});
-
-});
-
-  const itemsBatch = [];
-  const movementsBatch = [];
   const productsToRefresh = new Set();
 
-  for (const item of cart) {
-    const product = productMeta[item.productId];
-    const useFifo = expirationOn && product?.hasExpiration;
+  await runTransaction(db, async (tx) => {
+    const productSnapshots = [];
 
-    if (!useFifo) {
-      const itemRef = doc(collection(db, "sale_items"));
-      itemsBatch.push(setDoc(itemRef, {
-        saleId: saleRef.id,
-        productId: item.productId,
-        quantity: item.qty,
-        price: item.price,
-        price_min: item.price_min,
-        profit: (item.price - item.price_buy) * item.qty,
-        createdAt: Timestamp.fromMillis(saleDate)
-      }));
-
-      const moveRef = doc(collection(db, "stock_movements"));
-      movementsBatch.push(setDoc(moveRef, {
-        productId: item.productId,
-        type: "OUT",
-        quantity: item.qty,
-        reason: "sale",
-        referenceId: saleRef.id,
-        createdBy: finalSellerId,
-        createdAt: Timestamp.fromMillis(saleDate)
-      }));
-
-      continue;
+    for (const item of cart) {
+      const ref = doc(db, "products", item.productId);
+      const snap = await tx.get(ref);
+      productSnapshots.push({ item, ref, snap });
     }
 
-    const allocations = allocateFifo(
-      item.productId,
-      item.qty,
-      saleMovementsByProduct[item.productId] || [],
-      { excludeExpired: true, asOfDate: saleAsOfDate }
-    );
+    for (const row of productSnapshots) {
+      const { item, ref, snap } = row;
 
-    for (const allocation of allocations) {
-      const itemRef = doc(collection(db, "sale_items"));
-      const itemPayload = {
-        saleId: saleRef.id,
-        productId: item.productId,
-        quantity: allocation.qty,
-        price: item.price,
-        price_min: item.price_min,
-        profit: (item.price - item.price_buy) * allocation.qty,
-        createdAt: Timestamp.fromMillis(saleDate)
-      };
-
-      if (allocation.expirationDate) {
-        itemPayload.expirationDate = allocation.expirationDate;
+      if (!snap.exists()) {
+        throw new Error("Produit supprimé");
       }
 
-      itemsBatch.push(setDoc(itemRef, itemPayload));
+      const stock = snap.data().stock_current || 0;
 
-      const moveRef = doc(collection(db, "stock_movements"));
-      const movePayload = {
-        productId: item.productId,
-        type: "OUT",
-        quantity: allocation.qty,
-        reason: "sale",
-        referenceId: saleRef.id,
-        createdBy: finalSellerId,
-        createdAt: Timestamp.fromMillis(saleDate)
-      };
-
-      if (allocation.expirationDate) {
-        movePayload.expirationDate = allocation.expirationDate;
+      if (stock < item.qty) {
+        throw new Error("Stock insuffisant");
       }
 
-      if (allocation.batchId) {
-        movePayload.batchId = allocation.batchId;
-      }
-
-      movementsBatch.push(setDoc(moveRef, movePayload));
+      tx.update(ref, {
+        stock_current: stock - item.qty
+      });
     }
 
-    productsToRefresh.add(item.productId);
-  }
+    tx.set(saleRef, {
+      sellerId: finalSellerId,
+      clientName: name,
+      total_amount: totalAmount,
+      total_profit: totalProfit,
+      offlineActionId: offlineActionId || null,
+      deviceId: deviceId || null,
+      syncSource: offlineActionId ? "offline-sync" : "online",
+      status: "active",
+      ...payment,
+      createdAt: Timestamp.fromMillis(saleDate)
+    });
 
-  await Promise.all([...itemsBatch, ...movementsBatch]);
+    for (const item of cart) {
+      const product = productMeta[item.productId];
+      const useFifo = expirationOn && product?.hasExpiration;
+
+      if (!useFifo) {
+        const itemRef = doc(collection(db, "sale_items"));
+        tx.set(itemRef, {
+          saleId: saleRef.id,
+          productId: item.productId,
+          quantity: item.qty,
+          price: item.price,
+          price_min: item.price_min,
+          profit: (item.price - item.price_buy) * item.qty,
+          createdAt: Timestamp.fromMillis(saleDate)
+        });
+
+        const moveRef = doc(collection(db, "stock_movements"));
+        tx.set(moveRef, {
+          productId: item.productId,
+          type: "OUT",
+          quantity: item.qty,
+          reason: "sale",
+          referenceId: saleRef.id,
+          createdBy: finalSellerId,
+          createdAt: Timestamp.fromMillis(saleDate)
+        });
+
+        continue;
+      }
+
+      const allocations = allocateFifo(
+        item.productId,
+        item.qty,
+        saleMovementsByProduct[item.productId] || [],
+        { excludeExpired: true, asOfDate: saleAsOfDate }
+      );
+
+      for (const allocation of allocations) {
+        const itemRef = doc(collection(db, "sale_items"));
+        const itemPayload = {
+          saleId: saleRef.id,
+          productId: item.productId,
+          quantity: allocation.qty,
+          price: item.price,
+          price_min: item.price_min,
+          profit: (item.price - item.price_buy) * allocation.qty,
+          createdAt: Timestamp.fromMillis(saleDate)
+        };
+
+        if (allocation.expirationDate) {
+          itemPayload.expirationDate = allocation.expirationDate;
+        }
+
+        tx.set(itemRef, itemPayload);
+
+        const moveRef = doc(collection(db, "stock_movements"));
+        const movePayload = {
+          productId: item.productId,
+          type: "OUT",
+          quantity: allocation.qty,
+          reason: "sale",
+          referenceId: saleRef.id,
+          createdBy: finalSellerId,
+          createdAt: Timestamp.fromMillis(saleDate)
+        };
+
+        if (allocation.expirationDate) {
+          movePayload.expirationDate = allocation.expirationDate;
+        }
+
+        if (allocation.batchId) {
+          movePayload.batchId = allocation.batchId;
+        }
+
+        tx.set(moveRef, movePayload);
+      }
+
+      productsToRefresh.add(item.productId);
+    }
+
+    if (payment.payment_status === "partial") {
+      const debtRef = doc(collection(db, "debts"));
+      tx.set(debtRef, {
+        category: "debt",
+        reason: "debt",
+        name: name,
+        amount: payment.amount_remaining,
+        amount_total: totalAmount,
+        amount_paid: payment.amount_paid,
+        amount_remaining: payment.amount_remaining,
+        status: "partial",
+        isSystemCorrection: false,
+        relatedSaleId: saleRef.id,
+        DueDate: Timestamp.fromMillis(saleDate + 7 * 86400000),
+        createdAt: Timestamp.fromMillis(saleDate),
+        updatedAt: Timestamp.fromMillis(saleDate),
+        createdBy: finalSellerId
+      });
+    }
+  });
 
   for (const productId of productsToRefresh) {
-    const movSnap = await getDocs(
-      query(
-        collection(db, "stock_movements"),
-        where("productId", "==", productId)
-      )
-    );
+    try {
+      const movSnap = await getDocs(
+        query(
+          collection(db, "stock_movements"),
+          where("productId", "==", productId)
+        )
+      );
 
-    const movements = movSnap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
+      const movements = movSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
 
-    await refreshProductExpirationCache(productId, movements);
-  }
-
-  // =========================
-  // 4. DEBT (SI PARTIEL)
-  // =========================
-  if (payment.payment_status === "partial") {
-
-    const debtRef = doc(collection(db, "debts"));
-
-    await setDoc(debtRef, {
-      category: "debt",
-      reason: "debt",
-      name: name,
-      amount: payment.amount_remaining,
-      amount_total: totalAmount,
-      amount_paid: payment.amount_paid,
-      amount_remaining: payment.amount_remaining,
-      status: "partial",
-      isSystemCorrection: false,
-      relatedSaleId: saleRef.id,
-      DueDate: Timestamp.fromMillis(saleDate + 7 * 86400000),
-      createdAt: Timestamp.fromMillis(saleDate),
-      updatedAt: Timestamp.fromMillis(saleDate),
-      createdBy: finalSellerId
-    });
+      await refreshProductExpirationCache(productId, movements);
+    } catch (err) {
+      console.warn("refreshProductExpirationCache:", err);
+    }
   }
 
   await writeLog({

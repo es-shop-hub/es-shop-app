@@ -260,59 +260,74 @@ async function loadAppConfig() {
     box.style.borderRadius = "12px";
     box.style.background = "#fff";
 
-    box.innerHTML = `
-      <h3>✏️ Modifier configuration</h3>
+    const title = document.createElement("h3");
+    title.textContent = "✏️ Modifier configuration";
+    box.appendChild(title);
 
-      <label>Nom boutique</label>
-      <input id="cfg_shopName" type="text">
+    const fields = [
+      { id: "cfg_shopName", label: "Nom boutique", type: "text" },
+      { id: "cfg_shopAddress", label: "Adresse", type: "text" },
+      { id: "cfg_shopPhone", label: "Téléphone", type: "text" },
+      { id: "cfg_logoUrl", label: "Logo URL", type: "text" },
+      { id: "cfg_currency", label: "Devise (verrouillée)", type: "text", disabled: true },
+      { id: "cfg_currencySymbol", label: "Symbole (verrouillé)", type: "text", disabled: true },
+      { id: "cfg_lowStock", label: "Stock faible", type: "number" }
+    ];
 
-      <label>Adresse</label>
-      <input id="cfg_shopAddress" type="text">
+    for (const field of fields) {
+      const label = document.createElement("label");
+      label.textContent = field.label;
+      label.setAttribute("for", field.id);
+      const input = document.createElement("input");
+      input.id = field.id;
+      input.type = field.type;
+      if (field.disabled) input.disabled = true;
+      box.append(label, input);
+    }
 
-      <label>Téléphone</label>
-      <input id="cfg_shopPhone" type="text">
+    const offlineLabel = document.createElement("label");
+    const offlineInput = document.createElement("input");
+    offlineInput.id = "cfg_offline";
+    offlineInput.type = "checkbox";
+    offlineLabel.append(offlineInput, document.createTextNode(" Mode offline"));
+    box.appendChild(offlineLabel);
 
-      <label>Logo URL</label>
-      <input id="cfg_logoUrl" type="text">
+    const expirationLabel = document.createElement("label");
+    const expirationInput = document.createElement("input");
+    expirationInput.id = "cfg_enableExpiration";
+    expirationInput.type = "checkbox";
+    expirationLabel.append(
+      expirationInput,
+      document.createTextNode(" Gestion expiration produits")
+    );
+    box.appendChild(expirationLabel);
 
-      <label>Devise (verrouillée)</label>
-      <input id="cfg_currency" type="text" disabled>
+    const expirationAlertWrap = document.createElement("div");
+    expirationAlertWrap.id = "cfg_expirationAlertWrap";
+    const alertLabel = document.createElement("label");
+    alertLabel.setAttribute("for", "cfg_expirationAlertDays");
+    alertLabel.textContent = "Alerte expiration (jours avant)";
+    const alertInput = document.createElement("input");
+    alertInput.id = "cfg_expirationAlertDays";
+    alertInput.type = "number";
+    alertInput.min = "1";
+    alertInput.step = "1";
+    expirationAlertWrap.append(alertLabel, alertInput);
+    box.appendChild(expirationAlertWrap);
 
-      <label>Symbole (verrouillé)</label>
-      <input id="cfg_currencySymbol" type="text" disabled>
-
-      <label>Stock faible</label>
-      <input id="cfg_lowStock" type="number">
-
-      <label>
-        <input id="cfg_offline" type="checkbox">
-        Mode offline
-      </label>
-
-      <label>
-        <input id="cfg_enableExpiration" type="checkbox">
-        Gestion expiration produits
-      </label>
-
-      <div id="cfg_expirationAlertWrap">
-        <label for="cfg_expirationAlertDays">Alerte expiration (jours avant)</label>
-        <input id="cfg_expirationAlertDays" type="number" min="1" step="1">
-      </div>
-
-      <button id="saveConfigBtn"
-        style="
-          margin-top:15px;
-          padding:10px 14px;
-          background:#0B3D2E;
-          color:#fff;
-          border:none;
-          border-radius:10px;
-          font-weight:700;
-          cursor:pointer;
-        ">
-        💾 Sauvegarder
-      </button>
-    `;
+    const saveBtn = document.createElement("button");
+    saveBtn.id = "saveConfigBtn";
+    saveBtn.type = "button";
+    saveBtn.textContent = "💾 Sauvegarder";
+    saveBtn.style.marginTop = "15px";
+    saveBtn.style.padding = "10px 14px";
+    saveBtn.style.background = "#0B3D2E";
+    saveBtn.style.color = "#fff";
+    saveBtn.style.border = "none";
+    saveBtn.style.borderRadius = "10px";
+    saveBtn.style.fontWeight = "700";
+    saveBtn.style.cursor = "pointer";
+    box.appendChild(saveBtn);
 
     document.getElementById("configSection")?.appendChild(box);
 

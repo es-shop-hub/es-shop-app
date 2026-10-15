@@ -116,7 +116,7 @@ export async function ensureFirestoreUser(user, options = {}) {
     userId: uid,
     name: user.displayName || user.email?.split("@")[0] || "Utilisateur",
     email: (user.email || "").toLowerCase(),
-    role: "seller",
+    role: "user",
     isActive,
     createdAt: Timestamp.now()
   });

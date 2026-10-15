@@ -33,11 +33,18 @@
   font-family:Arial,sans-serif;
 }
 
+html{
+  overflow-x:hidden;
+  max-width:100%;
+}
+
 body{
   background:#f5f6fa;
   color:#2f3640;
 
   min-height:100vh;
+  max-width:100%;
+  overflow-x:hidden;
 
   padding-bottom:100px;
 }
@@ -63,6 +70,7 @@ header{
 
 header h1{
   font-size:20px;
+  word-break:break-word;
 }
 
 header p{
@@ -71,6 +79,7 @@ header p{
 
   font-size:12px;
   opacity:0.8;
+  word-break:break-word;
 
 }
 
@@ -78,10 +87,12 @@ header p{
 
 main{
 
-  width:95%;
+  width:100%;
   max-width:1200px;
+  min-width:0;
 
   margin:20px auto;
+  padding:0 12px;
 
 }
 
@@ -96,6 +107,10 @@ main{
   padding:18px;
 
   margin-bottom:18px;
+
+  max-width:100%;
+  min-width:0;
+  overflow:hidden;
 
   box-shadow:
     0 4px 14px rgba(0,0,0,0.06);
@@ -125,7 +140,9 @@ main{
 .top-actions{
 
   display:flex;
+  flex-wrap:wrap;
   justify-content:flex-end;
+  gap:8px;
 
   margin-bottom:14px;
 
@@ -166,7 +183,10 @@ button{
 /* TABLE */
 
 .table-wrapper{
+  width:100%;
+  max-width:100%;
   overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
 }
 
 table{
@@ -175,8 +195,27 @@ table{
 
   border-collapse:collapse;
 
-  min-width:700px;
+}
 
+#usersTable{
+  min-width:640px;
+}
+
+.config-table{
+  min-width:0;
+  table-layout:fixed;
+}
+
+.config-table td{
+  word-break:break-word;
+  overflow-wrap:anywhere;
+}
+
+.config-table td:first-child{
+  width:42%;
+  font-weight:700;
+  color:#444;
+  vertical-align:top;
 }
 
 thead{
@@ -196,6 +235,8 @@ th,td{
     1px solid #ececec;
 
   font-size:13px;
+
+  word-break:break-word;
 
 }
 
@@ -347,7 +388,10 @@ tbody tr:hover{
 .modal-content{
 
   width:100%;
-  max-width:380px;
+  max-width:min(380px,100%);
+  max-height:min(90vh,720px);
+  overflow-x:hidden;
+  overflow-y:auto;
 
   background:#fff;
 
@@ -384,6 +428,7 @@ tbody tr:hover{
 .modal-content select{
 
   width:100%;
+  max-width:100%;
 
   padding:12px;
 
@@ -394,6 +439,41 @@ tbody tr:hover{
 
   outline:none;
 
+}
+
+/* Formulaire config injecté (settings.js) */
+
+#configEditBox{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow:hidden;
+  box-sizing:border-box;
+}
+
+#configEditBox label{
+  display:block;
+  margin:12px 0 6px;
+  font-size:13px;
+  font-weight:700;
+}
+
+#configEditBox input[type="text"],
+#configEditBox input[type="number"],
+#configEditBox input[type="url"],
+#configEditBox input:not([type]){
+  width:100%;
+  max-width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #dcdde1;
+  outline:none;
+}
+
+#configEditBox input[type="checkbox"]{
+  width:auto;
+  max-width:none;
+  margin-right:8px;
 }
 
 .modal-actions{
@@ -555,12 +635,36 @@ nav .nav-item.active{
 
 @media(max-width:700px){
 
+  main{
+    padding:0 10px;
+    margin:14px auto;
+  }
+
+  .section-card{
+    padding:14px;
+    border-radius:12px;
+  }
+
   th,td{
     font-size:12px;
+    padding:10px 8px;
   }
 
   .actions{
     flex-direction:column;
+  }
+
+  .primary-btn,
+  #saveConfigBtn{
+    width:100%;
+  }
+
+  .top-actions{
+    justify-content:stretch;
+  }
+
+  .top-actions .primary-btn{
+    width:100%;
   }
 
 }
@@ -660,7 +764,7 @@ nav .nav-item.active{
 
   <div class="table-wrapper">
 
-    <table>
+    <table class="config-table">
 
       <tbody>
 

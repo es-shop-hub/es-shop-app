@@ -60,7 +60,21 @@ async function writeLog(entry = {}) {
     });
     return docRef.id;
   } catch (err) {
-    console.warn("writeLog:", err);
+    console.error("writeLog failed:", err?.code || err?.message || err, entry?.action);
+    try {
+      const failed = JSON.parse(sessionStorage.getItem("failed_logs_v1") || "[]");
+      failed.push({
+        at: Date.now(),
+        action: entry?.action || null,
+        message: err?.message || String(err)
+      });
+      sessionStorage.setItem(
+        "failed_logs_v1",
+        JSON.stringify(failed.slice(-20))
+      );
+    } catch (_) {
+      /* ignore storage errors */
+    }
     return null;
   }
 }

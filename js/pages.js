@@ -21,7 +21,7 @@ function go(page) {
    HIDE ALL ON BLOCK
 ================================ */
 function blockAccess() {
-  document.body.innerHTML = "";
+  document.body.replaceChildren();
   document.body.style.background = "black";
 
   const div = document.createElement("div");
@@ -31,7 +31,7 @@ function blockAccess() {
   div.style.alignItems = "center";
   div.style.justifyContent = "center";
   div.style.fontSize = "20px";
-  div.innerText = "⛔ Accès refusé";
+  div.textContent = "⛔ Accès refusé";
 
   document.body.appendChild(div);
 }

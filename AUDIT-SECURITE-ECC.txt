@@ -1,0 +1,218 @@
+================================================================================
+STOCKFLOW — RAPPORT AUDIT SÉCURITÉ / INTÉGRITÉ (ECC)
+Date : 15 octobre 2026
+Méthode : skill ECC production-audit + exploration code + corrections ciblées
+================================================================================
+
+SCORE INITIAL (avant corrections)
+---------------------------------
+Production audit : ~52/100 — RISQUÉ
+Motif : rules Firestore trop ouvertes, ventes non atomiques, stats faussées
+par les ventes annulées, signup incohérent, CSP manquante, sync offline fragile.
+
+
+================================================================================
+1. DIAGNOSTIC — FAILES IDENTIFIÉES
+================================================================================
+
+BLOCKERS
+--------
+B1. Collections métier en signedIn() seul
+    Fichier : firestore rulses.txt
+    Impact  : tout compte Firebase Auth pouvait lire/écrire stock, ventes,
+              mouvements, dépenses, etc. même sans profil actif valide.
+
+B2. Self-réactivation isActive
+    Fichier : firestore rulses.txt (match /users)
+    Impact  : un utilisateur désactivé pouvait remettre isActive: true sur
+              son propre document.
+
+B3. Vente non atomique
+    Fichier : js/index.js → processSaleOnline
+    Impact  : stock + sale en transaction, puis sale_items / stock_movements
+              hors transaction → risque vente orpheline / stock faux.
+
+B4. Stats / Dashboard incluaient les ventes cancelled
+    Fichiers : js/loader.js, js/render.js, js/stats.js
+    Impact  : CA et bénéfices gonflés après annulation de vente.
+
+B5. Signup role incohérent (corrigé puis rétabli selon choix métier)
+    Voir section 3 — rôle "user" conservé volontairement pour la sécurité.
+
+
+HIGH RISKS
+----------
+H1. stock_current jamais recalculé depuis stock_movements (dérive possible)
+H2. Achat non atomique (purchase + items avant stock/mouvement)
+H3. Offline sync : double exécution multi-onglets possible
+H4. CSP absente sur pages critiques (index, login, vendus, etc.)
+H5. writeLog avalait les erreurs sans trace
+H6. innerHTML dans settings (formulaire config)
+H7. Dépenses créées sans status: "active"
+
+
+================================================================================
+2. CORRECTIONS APPLIQUÉES
+================================================================================
+
+A. FIRESTORE RULES (firestore rulses.txt)
+-----------------------------------------
+- Écritures métier : isActiveMember() (auth + user actif + rôle admin|seller)
+- Lectures métier : signedIn() (conservé pour perf / compat)
+- sale_items, stock_movements, purchase_items, batch_movements, logs :
+  CREATE ONLY (update/delete refusés) — aligné Collections.md
+- users update self : role, userId, isActive immuables (anti self-réactivation)
+- isAdmin() exige aussi isActive == true
+- Création user signup : role forcé == "user" (voir section 3)
+
+IMPORTANT — DÉPLOIEMENT MANUEL OBLIGATOIRE :
+  Firebase Console → Firestore → Règles → coller firestore rulses.txt → Publier
+  Sans cette étape, les rules durcies restent INACTIVES en production.
+
+
+B. SIGNUP / AUTH (sécurité par rôle)
+------------------------------------
+- js/signup.js     → role: "user" à l’inscription
+- js/auth-flow.js  → role: "user" (Google / ensureFirestoreUser)
+- Règles          → create users uniquement avec role == "user"
+
+Effet sécurité :
+  Nouveau compte = "user" → PAS d’écriture métier (isActiveMember refuse).
+  Un admin doit promouvoir en "seller" ou "admin" pour ouvrir l’accès écriture.
+
+
+C. STATS / DASHBOARD — filtre cancelled
+---------------------------------------
+- js/loader.js  : sales filtrées status !== "cancelled" avant KPI
+- js/render.js  : activeSales() + bénéfice lié aux saleIds actifs
+- js/stats.js   : buildPdfPayload() ignore les ventes cancelled
+
+Alignement avec vendeurs.js / chart.js déjà corrects.
+
+
+D. VENTE ATOMIQUE (js/index.js)
+-------------------------------
+processSaleOnline : UNE seule runTransaction contenant :
+  - décrément stock_current
+  - create sales
+  - create sale_items
+  - create stock_movements OUT
+  - create debts si paiement partial
+
+Refresh expiration cache reste hors transaction (cache UI, non critique).
+
+
+E. ACHAT ATOMIQUE (js/purchases.js)
+-----------------------------------
+processPurchaseOnline : UNE seule runTransaction contenant :
+  - create purchases
+  - create purchase_items
+  - update stock_current (+ price_buy éventuel)
+  - create stock_movements IN
+
+
+F. OFFLINE SYNC (js/offline.js)
+-------------------------------
+- Verrou multi-onglets : navigator.locks + fallback localStorage TTL
+- Actions au-delà de 5 retries : abandonnées avec toast visible
+- isSyncing par onglet conservé en complément
+
+
+G. CSP (Content-Security-Policy)
+--------------------------------
+Ajoutée sur :
+  index.html, login.html, signup.html, vendus.html, debts.html,
+  expenses.html, losses.html, finances.html, loader.html,
+  help.html, expensess.html
+
+
+H. XSS / DOM
+------------
+- js/settings.js : formulaire config construit en createElement (plus d’innerHTML)
+- js/pages.js    : blockAccess → replaceChildren + textContent
+
+
+I. LOGS / DÉPENSES
+------------------
+- js/firebase.js writeLog : console.error + filet sessionStorage failed_logs_v1
+- js/expenses.js : status "active" + isSystemCorrection false à la création
+
+
+J. RANKING (contexte proche — session précédente)
+-------------------------------------------------
+js/ranging.js déjà corrigé séparément :
+  - jointure sale_items par saleId (comme Stats)
+  - Moins vendus inclut quantité 0
+  - barre bénéfices = marginRate
+
+
+================================================================================
+3. RÔLE "user" AU SIGNUP — CHOIX SÉCURITÉ CONFIRMÉ
+================================================================================
+
+Ce n’est PAS un bug. C’est volontaire :
+
+  Inscription  → role: "user"
+  Accès métier écriture → seulement après promotion admin → seller | admin
+
+Schéma rôles :
+  user   = compte créé, en attente / restreint
+  seller = vendeur opérationnel
+  admin  = administration
+
+Ne PAS remettre role: "seller" automatiquement au signup.
+
+
+================================================================================
+4. RESTE À FAIRE (NON CORRIGÉ DANS CET AUDIT)
+================================================================================
+
+- Recalcul systématique stock_current depuis stock_movements (job / réparation)
+- Restreindre update de sales (cancel-only) côté rules
+- Validation schéma des stock_movements / sale_items à la création (rules)
+- Lecture métier encore ouverte à signedIn() (user désactivé peut encore lire)
+- Premier admin : à promouvoir manuellement en Firebase Console
+- Migrer d’éventuels anciens docs users avec rôle invalide
+- CSP : retirer unsafe-eval sur stats/vendeurs si possible plus tard
+
+
+================================================================================
+5. FICHIERS TOUCHÉS (LISTE)
+================================================================================
+
+firestore rulses.txt
+js/signup.js
+js/auth-flow.js
+js/loader.js
+js/render.js
+js/stats.js
+js/index.js
+js/purchases.js
+js/offline.js
+js/firebase.js
+js/settings.js
+js/pages.js
+js/expenses.js
+index.html, login.html, signup.html, vendus.html, debts.html,
+expenses.html, losses.html, finances.html, loader.html, help.html,
+expensess.html
+(+ ranging.js / ranging.html si corrections ranking de la session liée)
+
+
+================================================================================
+6. CHECKLIST POST-DÉPLOIEMENT
+================================================================================
+
+[ ] Coller et publier firestore rulses.txt dans Firebase Console
+[ ] Vérifier qu’un nouveau signup a role "user" et ne peut pas créer de vente
+[ ] Promouvoir un compte test en seller → vente OK
+[ ] Annuler une vente → Stats / Dashboard ne comptent plus cette vente
+[ ] Tester vente online (stock + items + mouvements cohérents)
+[ ] Tester achat online (idem)
+[ ] Tester sync offline depuis 2 onglets (un seul sync à la fois)
+[ ] Vérifier CSP : pages chargent scripts Firebase sans erreur console
+
+
+================================================================================
+FIN DU RAPPORT
+================================================================================

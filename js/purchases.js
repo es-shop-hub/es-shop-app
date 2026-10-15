@@ -535,103 +535,63 @@ async function processPurchaseOnline(data) {
       ? quantity * unitPrice
       : 0;
 
-  const purchaseRef =
-    await addDoc(purchasesCol, {
-
-      supplier,
-
-      total_cost: totalCost,
-
-      createdBy,
-
-      createdAt: now()
-
-    });
-
-  const purchaseItemPayload = {
-    purchaseId: purchaseRef.id,
-    productId,
-    quantity,
-    price: unitPrice,
-    createdAt: now()
-  };
-
-  if (productHasExpiration && expirationTimestamp) {
-    purchaseItemPayload.expirationDate = expirationTimestamp;
-  }
-
-  await addDoc(purchaseItemsCol, purchaseItemPayload);
-
   let diffExpense = 0;
+  const purchaseRef = doc(purchasesCol);
+  const purchaseItemRef = doc(purchaseItemsCol);
 
   await runTransaction(db, async (tx) => {
-
-    const productRef =
-      doc(db, "products", productId);
-
-    const productSnapTx =
-      await tx.get(productRef);
+    const productRef = doc(db, "products", productId);
+    const productSnapTx = await tx.get(productRef);
 
     if (!productSnapTx.exists()) {
-
-      throw new Error(
-        "Produit supprimé"
-      );
-
+      throw new Error("Produit supprimé");
     }
 
-    const productDataTx =
-      productSnapTx.data();
-
-    const currentStock =
-      Number(
-        productDataTx?.stock_current || 0
-      );
-
-    const oldBuyPrice =
-      Number(
-        productDataTx?.price_buy || 0
-      );
+    const productDataTx = productSnapTx.data();
+    const currentStock = Number(productDataTx?.stock_current || 0);
+    const oldBuyPrice = Number(productDataTx?.price_buy || 0);
 
     const updateData = {
-
-      stock_current:
-        currentStock + quantity,
-
+      stock_current: currentStock + quantity,
       updatedAt: now()
-
     };
 
-    if (
-      unitPrice !== null &&
-      unitPrice > 0
-    ) {
-
-      updateData.price_buy =
-        unitPrice;
+    if (unitPrice !== null && unitPrice > 0) {
+      updateData.price_buy = unitPrice;
 
       if (unitPrice > oldBuyPrice) {
-
-        diffExpense =
-          (unitPrice - oldBuyPrice)
-          * quantity;
-
+        diffExpense = (unitPrice - oldBuyPrice) * quantity;
       }
-
     }
 
     if (productHasExpiration && expirationTimestamp) {
       updateData.expirationDate = expirationTimestamp;
     }
 
-    tx.update(
-      productRef,
-      updateData
-    );
+    tx.set(purchaseRef, {
+      supplier,
+      total_cost: totalCost,
+      createdBy,
+      createdAt: now()
+    });
 
-    const moveRef =
-      doc(stockMovementsCol);
+    const purchaseItemPayload = {
+      purchaseId: purchaseRef.id,
+      productId,
+      quantity,
+      price: unitPrice,
+      createdAt: now()
+    };
 
+    if (productHasExpiration && expirationTimestamp) {
+      purchaseItemPayload.expirationDate = expirationTimestamp;
+    }
+
+    tx.set(purchaseItemRef, purchaseItemPayload);
+
+    tx.update(productRef, updateData);
+
+    const moveRef = doc(stockMovementsCol);
     const movementPayload = {
       productId,
       type: "IN",
@@ -648,7 +608,6 @@ async function processPurchaseOnline(data) {
     }
 
     tx.set(moveRef, movementPayload);
-
   });
 
   if (productHasExpiration) {

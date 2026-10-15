@@ -62,8 +62,17 @@ function buildTutorialPanel(page) {
 
 function buildAccordion(container) {
   container.replaceChildren();
+  let lastSection = "";
 
   HELP_TUTORIALS.forEach((page) => {
+    const sectionName = page.section || "";
+    if (sectionName && sectionName !== lastSection) {
+      lastSection = sectionName;
+      const sectionTitle = createTextEl("h3", sectionName);
+      sectionTitle.className = "help-section-group";
+      container.appendChild(sectionTitle);
+    }
+
     const item = document.createElement("article");
     item.className = "help-accordion-item";
 

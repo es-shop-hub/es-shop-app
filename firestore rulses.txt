@@ -45,7 +45,8 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && userExists(request.auth.uid)
-        && userDoc(request.auth.uid).data.role == 'admin';
+        && userDoc(request.auth.uid).data.role == 'admin'
+        && userDoc(request.auth.uid).data.isActive == true;
     }
 
     function isActiveMember() {
@@ -67,7 +68,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll([
           'userId', 'name', 'role', 'isActive', 'createdAt'
         ])
-        && validRole(request.resource.data.role)
+        // Signup public = role "user" uniquement (promotion seller/admin via isAdmin)
+        && request.resource.data.role == 'user'
         && request.resource.data.isActive is bool
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -92,8 +94,12 @@ service cloud.firestore {
         && request.resource.data.usersCount >= 0;
     }
 
+    // Create-only (immuable) — corrections = nouveaux docs
+    function createOnlyActive() {
+      return isActiveMember();
+    }
+
     // ── system/meta (compteur max 5 users) ───────────────────────────────────
-    // Créer une fois : { usersCount: 0, maxUsers: 5 }
     match /system/meta {
       allow read: if signedIn();
 
@@ -109,7 +115,6 @@ service cloud.firestore {
     }
 
     // ── users ────────────────────────────────────────────────────────────────
-    // Signup : Auth Firebase OK + doc users/{uid} inexistant → création autorisée
     match /users/{userId} {
       allow read: if signedIn();
 
@@ -117,68 +122,87 @@ service cloud.firestore {
         && underUserLimit()
         && validUserCreate();
 
-      allow update: if signedIn() && (
-        (request.auth.uid == userId
+      // Self-update : role, userId, isActive immuables (anti self-réactivation)
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == userId
           && userExists(userId)
           && request.resource.data.role == resource.data.role
-          && request.resource.data.userId == resource.data.userId)
-        || isAdmin()
-      );
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.isActive == resource.data.isActive
+        );
 
       allow delete: if isAdmin();
     }
 
-    // ── Collections métier — auth Firebase suffit (0 get users) ──────────────
+    // ── Collections métier — membre actif requis en écriture ─────────────────
     match /products/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /sales/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create, update: if isActiveMember();
+      allow delete: if isAdmin();
     }
 
+    // Immuables : create only (jamais update/delete)
     match /sale_items/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if createOnlyActive();
+      allow update, delete: if false;
     }
 
     match /stock_movements/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if createOnlyActive();
+      allow update, delete: if false;
     }
 
     match /purchases/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /purchase_items/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if createOnlyActive();
+      allow update, delete: if false;
     }
 
     match /expenses/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /debts/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /losses/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /logs/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
     }
 
-    // ── Clients / récompenses (registre interne lié à sales.clientName) ─────
     match /clients/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /client_rewards/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
-    // ── Config ───────────────────────────────────────────────────────────────
     match /appConfig/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
@@ -189,22 +213,26 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ── Demandes produits absents ────────────────────────────────────────────
     match /product_demands/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     // ── Module Batch (isolé) ─────────────────────────────────────────────────
     match /batch_products/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /product_batches/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow write: if isActiveMember();
     }
 
     match /batch_movements/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if createOnlyActive();
+      allow update, delete: if false;
     }
   }
 }

@@ -471,7 +471,9 @@ function getStatsFilterLabel() {
 }
 
 function buildPdfPayload() {
-  const sales = state.sales;
+  const sales = (state.sales || []).filter(
+    s => (s.status || "active") !== "cancelled"
+  );
   const expenses = state.expenses;
   const debts = state.debts;
   const losses = state.losses;
