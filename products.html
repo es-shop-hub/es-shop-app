@@ -321,9 +321,9 @@ nav .nav-item.active{
   .auth-links {
   display: flex;
   gap: 10px;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
-  margin: 20px 0;
+  margin: 0;
 }
 
 /* Base bouton */
@@ -551,6 +551,7 @@ nav .nav-item.active{
 }
 </style>
 <link rel="stylesheet" href="css/drawer.css">
+<link rel="stylesheet" href="css/page-links.css">
 </head>
 
 <body>
@@ -559,9 +560,15 @@ nav .nav-item.active{
   <h3>StockFlow - Produits</h3>
   <div class="status" id="status">● Online</div>
 </header>
-<div class="auth-links">
-  <a href="login.html" class="btn">Connexion</a>
-  <a href="ranging.html" class="debts-btn">🏆 Ranking</a>
+<div class="page-links-bar light" id="productsTopBar">
+  <div class="page-links" id="productsPageLinks" role="navigation" aria-label="Pages liées">
+    <a href="purchases.html">Achats</a>
+    <a href="suppliers.html">Fournisseurs</a>
+  </div>
+  <div class="auth-links">
+    <a href="login.html" class="btn">Connexion</a>
+    <a href="ranging.html" class="debts-btn">🏆 Ranking</a>
+  </div>
 </div>
 <div id="debug"></div>
 <div class="search-box">

@@ -9,8 +9,7 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
-  limit
+  orderBy
 } from "./firebase.js";
 import { auth, onAuthStateChanged } from "./auth.js";
 import { getAppConfig } from "./appConfig.js";
@@ -18,8 +17,6 @@ import { bindActionButton } from "./utils/buttonManager.js";
 
 export const $ = id => document.getElementById(id);
 export const n = v => Number(v) || 0;
-
-const STATS_LIST_LIMIT = 10;
 
 let chartApi = null;
 
@@ -30,7 +27,6 @@ export const state = {
   sales: [],
   expenses: [],
   debts: [],
-  recentDebts: [],
   losses: [],
   products: [],
   users: [],
@@ -211,17 +207,12 @@ function buildCollectionQuery(collectionName) {
   return query(collection(db, collectionName), ...constraints);
 }
 
-function buildOpenDebtsQuery(listOnly = false) {
-  const constraints = [
+function buildOpenDebtsQuery() {
+  return query(
+    collection(db, "debts"),
     where("amount_remaining", ">", 0),
     orderBy("amount_remaining", "desc")
-  ];
-
-  if (listOnly) {
-    constraints.push(limit(STATS_LIST_LIMIT));
-  }
-
-  return query(collection(db, "debts"), ...constraints);
+  );
 }
 
 export function formatMoney(v) {
@@ -248,14 +239,12 @@ async function loadData() {
     const lossesQuery = buildCollectionQuery("losses");
     const purchasesQuery = buildCollectionQuery("purchases");
     const stockQuery = buildCollectionQuery("stock_movements");
-    const openDebtsQuery = buildOpenDebtsQuery(false);
-    const recentDebtsQuery = buildOpenDebtsQuery(true);
+    const openDebtsQuery = buildOpenDebtsQuery();
 
     const [
       salesSnap,
       expensesSnap,
       debtsSnap,
-      recentDebtsSnap,
       lossesSnap,
       productsSnap,
       usersSnap,
@@ -267,7 +256,6 @@ async function loadData() {
       getDocs(salesQuery),
       getDocs(expensesQuery),
       getDocs(openDebtsQuery),
-      getDocs(recentDebtsQuery),
       getDocs(lossesQuery),
       getDocs(collection(db, "products")),
       getDocs(collection(db, "users")),
@@ -280,7 +268,6 @@ async function loadData() {
     state.sales = salesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.expenses = expensesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.debts = debtsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.recentDebts = recentDebtsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.losses = lossesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));

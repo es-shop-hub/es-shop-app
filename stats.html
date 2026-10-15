@@ -26,8 +26,8 @@
   --danger:#D92D20;
   --warning:#F59E0B;
   --success:#16A34A;
-  --shadow:0 3px 10px rgba(0,0,0,0.06);
-  --radius:14px;
+  --shadow:0 2px 8px rgba(0,0,0,0.05);
+  --radius:12px;
 }
 
 html,
@@ -194,15 +194,15 @@ main{
 .kpi-grid{
   display:grid;
   grid-template-columns:repeat(2,1fr);
-  gap:10px;
+  gap:8px;
 }
 
 .kpi-card{
   background:var(--card);
   border-radius:var(--radius);
-  padding:14px;
+  padding:10px 12px;
   box-shadow:var(--shadow);
-  min-height:110px;
+  min-height:72px;
   display:flex;
   flex-direction:column;
   justify-content:space-between;
@@ -216,9 +216,9 @@ main{
 }
 
 .kpi-label{
-  font-size:12px;
+  font-size:11px;
   color:var(--muted);
-  line-height:1.4;
+  line-height:1.35;
 }
 
 .kpi-trend{
@@ -235,86 +235,45 @@ main{
 }
 
 .kpi-value{
-  font-size:22px;
+  font-size:18px;
   font-weight:800;
-  margin-top:10px;
+  margin-top:6px;
+}
+
+.kpi-value.is-negative{
+  color:var(--danger);
 }
 
 .kpi-footer{
-  margin-top:10px;
+  margin-top:6px;
   font-size:11px;
   color:var(--muted);
 }
 
-/* SUIVI FINANCIER OPÉRATIONNEL */
-
-.finance-track{
-  background:var(--card);
-  border-radius:var(--radius);
-  padding:16px;
-  box-shadow:var(--shadow);
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-.finance-row{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:12px;
-  padding:10px 12px;
-  border-radius:10px;
-  background:#F9FAFB;
-}
-
-.finance-row-negative .finance-value{
-  color:var(--danger);
-}
-
-.finance-row-info{
-  background:transparent;
-  padding:6px 12px;
-}
-
-.finance-row-info .finance-label,
-.finance-row-info .finance-value{
-  font-size:12px;
-  color:var(--muted);
-}
-
-.finance-row-total{
-  margin-top:4px;
+.kpi-card-accent{
   background:var(--primary);
+}
+
+.kpi-card-accent .kpi-label,
+.kpi-card-accent .kpi-value{
   color:#fff;
 }
 
-.finance-row-total .finance-label,
-.finance-row-total .finance-value{
-  color:#fff;
-  font-weight:700;
+/* SUIVI FINANCIER OPÉRATIONNEL — grille fixe 2×3 / 3×2 */
+
+#operationalFinanceTrack{
+  grid-template-columns:repeat(2,minmax(0,1fr));
 }
 
-.finance-row-total .finance-value{
-  font-size:20px;
-}
-
-.finance-label{
-  font-size:13px;
-  font-weight:600;
-}
-
-.finance-value{
-  font-size:15px;
-  font-weight:800;
-  text-align:right;
+#operationalFinanceTrack .kpi-card-accent{
+  grid-column:auto;
 }
 
 .finance-note{
   font-size:11px;
   color:var(--muted);
   line-height:1.5;
-  padding:0 4px;
+  padding:0 2px;
 }
 
 /* CHARTS */
@@ -322,7 +281,7 @@ main{
 .chart-card{
   background:var(--card);
   border-radius:var(--radius);
-  padding:15px;
+  padding:12px;
   box-shadow:var(--shadow);
 }
 
@@ -437,7 +396,7 @@ main{
 .insight-card{
   background:var(--card);
   border-radius:var(--radius);
-  padding:14px;
+  padding:10px 12px;
   box-shadow:var(--shadow);
 }
 
@@ -564,6 +523,18 @@ main{
   }
 }
 
+a.debts-section-link,
+a.sellers-section-link{
+  margin-top:12px;
+  width:100%;
+  box-sizing:border-box;
+  text-decoration:none;
+}
+
+a.sellers-section-link{
+  margin-top:0;
+}
+
 a.shortcut-btn{
   display:flex;
   align-items:center;
@@ -632,7 +603,7 @@ a.shortcut-btn.orange:hover{
 .activity-card{
   background:var(--card);
   border-radius:var(--radius);
-  padding:14px;
+  padding:10px 12px;
   box-shadow:var(--shadow);
 }
 
@@ -806,6 +777,10 @@ nav .nav-item.active{
     grid-template-columns:repeat(4,1fr);
   }
 
+  #operationalFinanceTrack{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+
   .insight-grid{
     grid-template-columns:repeat(3,1fr);
   }
@@ -973,6 +948,27 @@ nav .nav-item.active{
 
   </section>
 
+  <section class="section" id="chartsSection">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Tendances</div>
+        <div class="section-subtitle">Cliquez une tuile pour afficher / masquer sa courbe</div>
+      </div>
+    </div>
+    <div class="chart-card" id="chartCard">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Évolution (Search Console)</div>
+          <div class="chart-sub">Plusieurs courbes classique · batch · Total · jours complets</div>
+        </div>
+      </div>
+      <div id="chartMetricGrid" class="chart-metric-grid" role="group" aria-label="Séries du graphique"></div>
+      <div class="chart-container" id="chartContainer">
+        <canvas id="statsChart"></canvas>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="classicBatchSplitSection">
     <div class="section-header">
       <div>
@@ -1016,27 +1012,6 @@ nav .nav-item.active{
     </div>
   </section>
 
-  <section class="section" id="chartsSection">
-    <div class="section-header">
-      <div>
-        <div class="section-title">Tendances</div>
-        <div class="section-subtitle">Cliquez une tuile pour afficher / masquer sa courbe</div>
-      </div>
-    </div>
-    <div class="chart-card" id="chartCard">
-      <div class="chart-header">
-        <div>
-          <div class="chart-title">Évolution (Search Console)</div>
-          <div class="chart-sub">Plusieurs courbes classique · batch · Total · jours complets</div>
-        </div>
-      </div>
-      <div id="chartMetricGrid" class="chart-metric-grid" role="group" aria-label="Séries du graphique"></div>
-      <div class="chart-container" id="chartContainer">
-        <canvas id="statsChart"></canvas>
-      </div>
-    </div>
-  </section>
-
   <section class="section" id="operationalFinanceSection">
 
     <div class="section-header">
@@ -1048,41 +1023,35 @@ nav .nav-item.active{
       </div>
     </div>
 
-    <div class="finance-track" id="operationalFinanceTrack">
-      <div class="finance-row">
-        <span class="finance-label">Bénéfice brut (marge ventes)</span>
-        <span class="finance-value" id="opGrossProfitValue">0$</span>
+    <div class="kpi-grid" id="operationalFinanceTrack">
+      <div class="kpi-card">
+        <div class="kpi-label">Bénéfice brut (marge ventes)</div>
+        <div class="kpi-value" id="opGrossProfitValue">0$</div>
       </div>
-
-      <div class="finance-row finance-row-negative">
-        <span class="finance-label">Dépenses opérationnelles</span>
-        <span class="finance-value" id="opExpensesValue">0$</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Dépenses opérationnelles</div>
+        <div class="kpi-value is-negative" id="opExpensesValue">0$</div>
       </div>
-
-      <div class="finance-row finance-row-negative">
-        <span class="finance-label">Pertes</span>
-        <span class="finance-value" id="opLossesValue">0$</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Pertes</div>
+        <div class="kpi-value is-negative" id="opLossesValue">0$</div>
       </div>
-
-      <div class="finance-row finance-row-info">
-        <span class="finance-label">Exclu — investissements</span>
-        <span class="finance-value" id="opExcludedInvestmentValue">0$</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Exclu — investissements</div>
+        <div class="kpi-value" id="opExcludedInvestmentValue">0$</div>
       </div>
-
-      <div class="finance-row finance-row-info">
-        <span class="finance-label">Exclu — réinvestissements</span>
-        <span class="finance-value" id="opExcludedReinvestmentValue">0$</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Exclu — réinvestissements</div>
+        <div class="kpi-value" id="opExcludedReinvestmentValue">0$</div>
       </div>
-
-      <div class="finance-row finance-row-total">
-        <span class="finance-label">Bénéfice net opérationnel</span>
-        <span class="finance-value" id="opNetProfitValue">0$</span>
+      <div class="kpi-card kpi-card-accent">
+        <div class="kpi-label">Bénéfice net opérationnel</div>
+        <div class="kpi-value" id="opNetProfitValue">0$</div>
       </div>
-
-      <p class="finance-note" id="opFinanceNote">
-        Le bénéfice net opérationnel = marge ventes − dépenses (hors invest./réinvest.) − pertes.
-      </p>
     </div>
+    <p class="finance-note" id="opFinanceNote">
+      Le bénéfice net opérationnel = marge ventes − dépenses (hors invest./réinvest.) − pertes.
+    </p>
 
   </section>
   
@@ -1244,57 +1213,34 @@ Ruptures stock
   </section>
 
   <section class="section" id="sellersSection">
-
     <div class="section-header">
       <div>
         <div class="section-title">Analyse vendeurs</div>
         <div class="section-subtitle">Performance équipe commerciale</div>
       </div>
     </div>
-
-    <div class="insight-grid" id="sellersGrid">
-
-      <div class="insight-card" id="leaderboardCard">
-        <div class="insight-top">
-          <div class="insight-title">🏆 Leaderboard</div>
-          <div class="badge badge-green">CA</div>
-        </div>
-        <div class="list" id="leaderboardList"></div>
-      </div>
-
-      <div class="insight-card" id="weakSellerCard">
-        <div class="insight-top">
-          <div class="insight-title">📊 Vendeurs faibles</div>
-          <div class="badge badge-orange">LOW</div>
-        </div>
-        <div class="list" id="weakSellerList"></div>
-      </div>
-
+    <div class="insight-card" id="sellersSummaryCard">
+      <a class="shortcut-btn sellers-section-link" id="sellersSectionLink" href="vendeurs.html">Voir analyse vendeurs</a>
     </div>
-
   </section>
-  
+
   <section class="section" id="debtsSection">
-
-<div class="section-header">
-<div>
-<div class="section-title">
-🧾 Gestion dettes
-</div>
-
-<div class="section-subtitle">
-Clients non soldés
-</div>
-</div>
-</div>
-
-<div class="insight-card">
-
-<div class="list" id="topDebtorsList"></div>
-
-</div>
-
-</section>
+    <div class="section-header">
+      <div>
+        <div class="section-title">🧾 Gestion dettes</div>
+        <div class="section-subtitle">Total restant dû</div>
+      </div>
+    </div>
+    <div class="insight-card" id="debtsSummaryCard">
+      <div class="list-item" id="debtsTotalRow">
+        <div class="list-left">
+          <div class="list-title">Total</div>
+        </div>
+        <div class="list-value" id="debtsTotalRemaining">0</div>
+      </div>
+      <a class="shortcut-btn debts-section-link" id="debtsSectionLink" href="debts.html">Voir dettes</a>
+    </div>
+  </section>
 
 
   <section class="section" id="shortcutsSection">
@@ -1311,6 +1257,7 @@ Clients non soldés
       <a class="shortcut-btn" id="shortcutDebts" href="debts.html">🧾 Dettes</a>
       <a class="shortcut-btn blue" id="shortcutClients" href="clients.html">👥 Clients</a>
       <a class="shortcut-btn gold" id="shortcutRanging" href="ranging.html">🏆 Ranking</a>
+      <a class="shortcut-btn blue" id="shortcutVendeurs" href="vendeurs.html">👤 Vendeurs</a>
       <a class="shortcut-btn orange" id="shortcutBatch" href="batch/batch_stats.html">📦 Stats lots</a>
       <a class="shortcut-btn" id="shortcutProducts" href="products.html">📦 Produits</a>
     </div>

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://cdn.jsdelivr.net https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.gstatic.com https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://firebase.googleapis.com https://cdn.jsdelivr.net https://esm.sh wss://*.firebaseio.com; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';">
+<title>StockFlow - Vendeurs</title>
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+  font-family:Arial,sans-serif;
+}
+
+:root{
+  --bg:#F5F5F5;
+  --card:#FFFFFF;
+  --text:#111111;
+  --muted:#666666;
+  --primary:#0B3D2E;
+  --gold:#D4AF37;
+  --danger:#D92D20;
+  --warning:#F59E0B;
+  --success:#16A34A;
+  --shadow:0 3px 10px rgba(0,0,0,0.06);
+  --radius:14px;
+}
+
+html,
+body{
+  overflow-x:hidden;
+  background:var(--bg);
+  color:var(--text);
+}
+
+body{
+  padding-bottom:90px;
+}
+
+header{
+  background:var(--primary);
+  color:#fff;
+  padding:14px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  position:sticky;
+  top:0;
+  z-index:100;
+  box-shadow:0 2px 8px rgba(0,0,0,0.15);
+}
+
+.header-left{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+
+.header-title{
+  font-size:18px;
+  font-weight:700;
+}
+
+.header-sub{
+  font-size:11px;
+  opacity:0.8;
+}
+
+.status{
+  font-size:12px;
+  color:var(--gold);
+  font-weight:bold;
+}
+
+.filters{
+  position:sticky;
+  top:60px;
+  z-index:90;
+  background:var(--bg);
+  padding:12px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.filters-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.filter-box{
+  background:var(--card);
+  border-radius:12px;
+  padding:10px;
+  box-shadow:var(--shadow);
+}
+
+.filter-box label{
+  display:block;
+  font-size:11px;
+  color:var(--muted);
+  margin-bottom:6px;
+  font-weight:600;
+}
+
+.filter-box select,
+.filter-box input{
+  width:100%;
+  border:none;
+  background:#F7F7F7;
+  border-radius:10px;
+  padding:10px;
+  font-size:13px;
+  color:var(--text);
+  outline:none;
+}
+
+.top-actions{
+  display:flex;
+  gap:10px;
+}
+
+.action-btn{
+  flex:1;
+  border:none;
+  border-radius:12px;
+  padding:12px;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:700;
+}
+
+.primary-btn{
+  background:var(--primary);
+  color:#fff;
+}
+
+.secondary-btn{
+  background:#fff;
+  color:var(--primary);
+  box-shadow:var(--shadow);
+}
+
+#debug{
+  padding:0 10px;
+  margin-top:10px;
+  font-size:12px;
+  color:var(--danger);
+}
+
+main{
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.section{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.section-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.section-title{
+  font-size:16px;
+  font-weight:700;
+}
+
+.section-subtitle{
+  font-size:12px;
+  color:var(--muted);
+}
+
+.insight-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+
+.insight-card{
+  background:var(--card);
+  border-radius:var(--radius);
+  padding:14px;
+  box-shadow:var(--shadow);
+}
+
+.insight-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:12px;
+}
+
+.insight-title{
+  font-size:14px;
+  font-weight:700;
+}
+
+.badge{
+  font-size:10px;
+  padding:4px 8px;
+  border-radius:30px;
+  font-weight:700;
+}
+
+.badge-green{
+  background:rgba(22,163,74,0.12);
+  color:var(--success);
+}
+
+.badge-orange{
+  background:rgba(245,158,11,0.12);
+  color:var(--warning);
+}
+
+.list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.list-item{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding-bottom:10px;
+  border-bottom:1px solid rgba(0,0,0,0.06);
+}
+
+.list-item:last-child{
+  border-bottom:none;
+  padding-bottom:0;
+}
+
+.list-left{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+
+.list-title{
+  font-size:13px;
+  font-weight:700;
+}
+
+.list-sub{
+  font-size:11px;
+  color:var(--muted);
+}
+
+.list-value{
+  font-size:13px;
+  font-weight:700;
+}
+
+.empty-state{
+  font-size:13px;
+  color:var(--muted);
+  padding:8px 0;
+}
+
+@media(min-width:900px){
+  main{
+    max-width:1400px;
+    margin:auto;
+  }
+
+  .insight-grid{
+    grid-template-columns:repeat(2,1fr);
+  }
+
+  .filters-grid{
+    grid-template-columns:repeat(3,1fr);
+  }
+}
+</style>
+<link rel="stylesheet" href="css/drawer.css">
+</head>
+<body id="vendeursPage">
+
+<header id="pageHeader">
+  <div class="header-left" id="headerLeft">
+    <div class="header-title" id="headerTitle">StockFlow - Vendeurs</div>
+    <div class="header-sub" id="headerSubtitle">Analyse équipe commerciale</div>
+  </div>
+  <div class="status" id="status">● Online</div>
+</header>
+
+<section class="filters" id="filtersSection">
+  <div class="filters-grid" id="filtersGrid">
+    <div class="filter-box" id="periodFilterBox">
+      <label for="statsRange">Période</label>
+      <select id="statsRange">
+        <option value="today">Aujourd'hui</option>
+        <option value="yesterday">Hier</option>
+        <option value="7days">7 jours</option>
+        <option value="30days" selected>30 jours</option>
+        <option value="month">Ce mois</option>
+        <option value="year">Cette année</option>
+        <option value="custom">Personnalisé</option>
+      </select>
+    </div>
+    <div class="filter-box" id="dateFromBox">
+      <label for="dateFrom">Date début</label>
+      <input type="date" id="dateFrom">
+    </div>
+    <div class="filter-box" id="dateToBox">
+      <label for="dateTo">Date fin</label>
+      <input type="date" id="dateTo">
+    </div>
+  </div>
+  <div class="top-actions" id="topActions">
+    <button type="button" class="action-btn primary-btn" id="applyFiltersBtn">✔ Appliquer filtres</button>
+    <button type="button" class="action-btn secondary-btn" id="refreshBtn">🔄 Actualiser</button>
+  </div>
+</section>
+
+<div id="debug"></div>
+
+<main id="vendeursMain">
+  <section class="section" id="sellersSection">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Analyse vendeurs</div>
+        <div class="section-subtitle">% nb ventes + % CA (séparés) et mix = moyenne — cancelled exclus</div>
+        <div class="section-subtitle" id="sellersExclusionNote">—</div>
+      </div>
+    </div>
+    <div class="insight-grid" id="sellersGrid">
+      <div class="insight-card" id="leaderboardCard">
+        <div class="insight-top">
+          <div class="insight-title">🏆 Leaderboard</div>
+          <div class="badge badge-green">MIX</div>
+        </div>
+        <div class="list" id="leaderboardList"></div>
+      </div>
+      <div class="insight-card" id="weakSellerCard">
+        <div class="insight-top">
+          <div class="insight-title">📊 Vendeurs faibles</div>
+          <div class="badge badge-orange">LOW</div>
+        </div>
+        <div class="list" id="weakSellerList"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="js/vendeurs.js"></script>
+<script src="js/drawer.js" defer></script>
+<script src="js/nav.js" defer></script>
+</body>
+</html>

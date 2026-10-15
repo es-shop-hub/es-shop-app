@@ -122,21 +122,44 @@ function getStockLabel(level) {
   return "Stock OK";
 }
 
+function buildRankEntry(productId, product, stats) {
+  const stockCurrent = Number(product.stock_current) || 0;
+  const stockThreshold = getStockThreshold(product);
+  const stockLevel = getStockLevel(stockCurrent, stockThreshold);
+  const quantity = Number(stats?.quantity) || 0;
+  const revenue = round2(stats?.revenue || 0);
+  const profit = round2(stats?.profit || 0);
+
+  return {
+    productId,
+    name: sanitizeText(product.name || "Produit inconnu"),
+    quantity,
+    revenue,
+    profit,
+    marginRate: revenue > 0 ? round2((profit / revenue) * 100) : 0,
+    profitPerUnit: quantity > 0 ? round2(profit / quantity) : 0,
+    avgPrice: quantity > 0 ? round2(revenue / quantity) : 0,
+    salesShare: 0,
+    stockCurrent,
+    stockThreshold,
+    stockLevel
+  };
+}
+
 /**
- * Agrège sale_items pour les ventes actives uniquement.
+ * Agrège sale_items pour les ventes actives uniquement (jointure par saleId).
  * CA = Σ (price × quantity)
  * Bénéfice = Σ profit (champ Firestore, déjà (prix vente − prix achat) × qté)
  */
 function buildSalesRanking(productsMap, saleItems, activeSaleIds) {
   const statsMap = new Map();
-  let totalQuantity = 0;
 
   saleItems.forEach(item => {
     const saleId = item.saleId;
     const productId = item.productId;
 
     if (!productId) return;
-    if (saleId && activeSaleIds && !activeSaleIds.has(saleId)) return;
+    if (!saleId || !activeSaleIds.has(saleId)) return;
 
     const quantity = Number(item.quantity) || 0;
     const unitPrice = Number(item.price) || 0;
@@ -147,8 +170,6 @@ function buildSalesRanking(productsMap, saleItems, activeSaleIds) {
     const lineProfit = Number.isFinite(Number(item.profit))
       ? round2(Number(item.profit))
       : 0;
-
-    totalQuantity += quantity;
 
     if (!statsMap.has(productId)) {
       statsMap.set(productId, {
@@ -170,44 +191,32 @@ function buildSalesRanking(productsMap, saleItems, activeSaleIds) {
   statsMap.forEach((stats, productId) => {
     const product = productsMap.get(productId);
     if (!product || product.isActive === false) return;
+    ranking.push(buildRankEntry(productId, product, stats));
+  });
 
-    const stockCurrent = Number(product.stock_current) || 0;
-    const stockThreshold = getStockThreshold(product);
-    const stockLevel = getStockLevel(stockCurrent, stockThreshold);
+  const totalQuantity = ranking.reduce((sum, item) => sum + item.quantity, 0);
 
-    const marginRate = stats.revenue > 0
-      ? round2((stats.profit / stats.revenue) * 100)
+  ranking.forEach(item => {
+    item.salesShare = totalQuantity > 0
+      ? round2((item.quantity / totalQuantity) * 100)
       : 0;
-
-    const profitPerUnit = stats.quantity > 0
-      ? round2(stats.profit / stats.quantity)
-      : 0;
-
-    const avgPrice = stats.quantity > 0
-      ? round2(stats.revenue / stats.quantity)
-      : 0;
-
-    const salesShare = totalQuantity > 0
-      ? round2((stats.quantity / totalQuantity) * 100)
-      : 0;
-
-    ranking.push({
-      productId,
-      name: sanitizeText(product.name || "Produit inconnu"),
-      quantity: stats.quantity,
-      revenue: stats.revenue,
-      profit: stats.profit,
-      marginRate,
-      profitPerUnit,
-      avgPrice,
-      salesShare,
-      stockCurrent,
-      stockThreshold,
-      stockLevel
-    });
   });
 
   return { ranking, totalQuantity };
+}
+
+/** Produits actifs sans vente sur la période (quantity 0) + vendus, pour « Moins vendus ». */
+function buildLeastSoldPool(productsMap, ranking) {
+  const soldIds = new Set(ranking.map(item => item.productId));
+  const pool = [...ranking];
+
+  productsMap.forEach((product, productId) => {
+    if (product.isActive === false) return;
+    if (soldIds.has(productId)) return;
+    pool.push(buildRankEntry(productId, product, null));
+  });
+
+  return sortByQuantityAsc(pool);
 }
 
 function buildLowStockList(productsMap, salesByProductId) {
@@ -378,11 +387,12 @@ function updateKpi(valueEl, nameEl, valueText, nameText) {
   if (nameEl) nameEl.textContent = nameText;
 }
 
-function renderRanking(ranking, lowStockList, period) {
+function renderRanking(ranking, leastSoldPool, lowStockList, period) {
   const hasSales = ranking.length > 0;
   const hasLowStock = lowStockList.length > 0;
+  const hasLeastSold = leastSoldPool.length > 0;
 
-  if (!hasSales && !hasLowStock) {
+  if (!hasSales && !hasLowStock && !hasLeastSold) {
     Object.values(containers).forEach(container => {
       showEmpty(container, "Aucune donnée sur cette période");
     });
@@ -396,12 +406,11 @@ function renderRanking(ranking, lowStockList, period) {
   }
 
   const byQuantityDesc = sortByQuantityDesc(ranking);
-  const byQuantityAsc = sortByQuantityAsc(ranking);
   const byProfitMargin = sortByProfitMargin(ranking);
   const byRevenue = sortByRevenue(ranking);
 
   const maxQty = byQuantityDesc[0]?.quantity || 1;
-  const maxProfit = byProfitMargin[0]?.profit || 1;
+  const maxMarginRate = byProfitMargin[0]?.marginRate || 1;
   const maxRevenue = byRevenue[0]?.revenue || 1;
 
   if (hasSales) {
@@ -466,7 +475,7 @@ function renderRanking(ranking, lowStockList, period) {
       type: "green",
       badgeType: "green",
       position: index + 1,
-      percent: maxProfit ? (item.profit / maxProfit) * 100 : 0,
+      percent: maxMarginRate ? (item.marginRate / maxMarginRate) * 100 : 0,
       progressType: "green",
       stockFlag: item.stockLevel !== "ok" ? item.stockLevel : null,
       lines: [
@@ -503,7 +512,6 @@ function renderRanking(ranking, lowStockList, period) {
     "Aucun produit avec CA"
   );
 
-  const leastSoldPool = byQuantityAsc.filter(item => item.quantity > 0);
   const mostSoldIds = new Set(byQuantityDesc.slice(0, MAX_ITEMS).map(i => i.productId));
 
   renderList(
@@ -569,17 +577,14 @@ async function loadRanking() {
 
   setStatus("Chargement...");
 
+  // Période = sales.createdAt uniquement (comme Stats). sale_items joints par saleId.
   const salesQuery = periodStart
     ? query(collection(db, "sales"), where("createdAt", ">=", periodStart))
     : collection(db, "sales");
 
-  const saleItemsQuery = periodStart
-    ? query(collection(db, "sale_items"), where("createdAt", ">=", periodStart))
-    : collection(db, "sale_items");
-
   const [salesSnap, saleItemsSnap, productsSnap] = await Promise.all([
     getDocs(salesQuery),
-    getDocs(saleItemsQuery),
+    getDocs(collection(db, "sale_items")),
     getDocs(collection(db, "products"))
   ]);
 
@@ -601,11 +606,12 @@ async function loadRanking() {
 
   const saleItems = saleItemsSnap.docs.map(docSnap => docSnap.data());
   const { ranking } = buildSalesRanking(productsMap, saleItems, activeSaleIds);
+  const leastSoldPool = buildLeastSoldPool(productsMap, ranking);
 
   const salesByProductId = new Map(ranking.map(item => [item.productId, item]));
   const lowStockList = buildLowStockList(productsMap, salesByProductId);
 
-  renderRanking(ranking, lowStockList, period);
+  renderRanking(ranking, leastSoldPool, lowStockList, period);
 
   if (currentUserId) {
     await writeLog({

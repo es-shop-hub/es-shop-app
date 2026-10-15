@@ -1,0 +1,86 @@
+/* Liens croisés — une seule barre sticky (non scrollable) */
+.page-links-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+}
+
+.page-links-bar.light {
+  background: transparent;
+}
+
+.page-links {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.page-links::-webkit-scrollbar {
+  display: none;
+}
+
+.page-links a {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: #111;
+  background: #d4af37;
+  border: 1px solid #d4af37;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.page-links a:hover {
+  background: #e4c45a;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.page-links a:active {
+  transform: translateY(0);
+}
+
+.page-links-bar.light .page-links a,
+.page-links.light a {
+  color: #fff;
+  background: #0b3d2e;
+  border-color: #0b3d2e;
+}
+
+.page-links-bar.light .page-links a:hover,
+.page-links.light a:hover {
+  background: #145a45;
+  color: #fff;
+}
+
+.page-links-bar .auth-links {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  margin-left: auto;
+}

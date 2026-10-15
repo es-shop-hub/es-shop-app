@@ -34,20 +34,6 @@ function getPurchaseTotal(purchase) {
     );
 }
 
-function resolveSellerName(sellerId) {
-  if (!sellerId || sellerId === "__unknown__") {
-    return "Vendeur inconnu";
-  }
-
-  const user = state.users.find(u =>
-    u.userId === sellerId ||
-    u.uid === sellerId ||
-    u.id === sellerId
-  );
-
-  return user?.name || sellerId;
-}
-
 export async function render(chartApi) {
   const sales = state.sales;
   const expenses = state.expenses;
@@ -100,7 +86,6 @@ export async function render(chartApi) {
   renderStockHealth();
   renderDebts();
   renderProducts();
-  renderSellers(sales, state.saleItems);
 
   if (state.chartReady && chartApi?.renderChart) {
     chartApi.renderChart();
@@ -253,67 +238,17 @@ function renderStockHealth() {
 }
 
 function renderDebts() {
-  clearNode("topDebtorsList");
+  const totalRemaining = (state.debts || [])
+    .filter(
+      debt =>
+        debt &&
+        debt.status !== "cancelled" &&
+        debt.status !== "paid" &&
+        n(debt.amount_remaining) > 0
+    )
+    .reduce((sum, debt) => sum + n(debt.amount_remaining), 0);
 
-  const box = $("topDebtorsList");
-
-  if (!box) {
-    return;
-  }
-
-  const debts =
-    (state.recentDebts || [])
-      .filter(
-        debt =>
-          debt &&
-          debt.status !== "cancelled" &&
-          debt.status !== "paid" &&
-          n(debt.amount_remaining) > 0
-      );
-
-  debts.forEach(debt => {
-    const item = document.createElement("div");
-    item.className = "list-item";
-
-    const left = document.createElement("div");
-    left.className = "list-left";
-
-    const title = document.createElement("div");
-    title.className = "list-title";
-    title.textContent =
-      debt.name ||
-      debt.customerName ||
-      "Client";
-
-    const sub = document.createElement("div");
-    sub.className = "list-sub";
-
-    const paid = n(debt.amount_paid);
-    const total = n(debt.amount_total);
-
-    sub.textContent =
-      `${paid.toLocaleString()} / ${total.toLocaleString()} payé`;
-
-    const value = document.createElement("div");
-    value.className = "list-value";
-    value.textContent =
-      formatMoney(debt.amount_remaining || 0);
-
-    left.appendChild(title);
-    left.appendChild(sub);
-
-    item.appendChild(left);
-    item.appendChild(value);
-
-    box.appendChild(item);
-  });
-
-  if (debts.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "Aucune dette client";
-    box.appendChild(empty);
-  }
+  setText("debtsTotalRemaining", formatMoney(totalRemaining));
 }
 
 function getBatchPeriodStats(sales) {
@@ -684,125 +619,5 @@ function renderProducts() {
 
     criticalBox.appendChild(item);
   });
-}
-
-function renderSellers(sales, saleItems) {
-  clearNode("leaderboardList");
-  clearNode("weakSellerList");
-
-  const boxTop = $("leaderboardList");
-  const boxWeak = $("weakSellerList");
-  if (!boxTop || !boxWeak) return;
-
-  const SELLER_SHARE_THRESHOLD = 30;
-  const map = {};
-  const UNKNOWN = "__unknown__";
-
-  const itemsBySale = {};
-
-  saleItems.forEach(i => {
-    if (!itemsBySale[i.saleId]) itemsBySale[i.saleId] = [];
-    itemsBySale[i.saleId].push(i);
-  });
-
-  sales.forEach(s => {
-    const sellerId = s.sellerId || UNKNOWN;
-    const saleKey = s.saleId || s.id;
-    const items = itemsBySale[saleKey] || [];
-
-    if (!map[sellerId]) {
-      map[sellerId] = { amount: 0, saleCount: 0, unitCount: 0 };
-    }
-
-    map[sellerId].saleCount += 1;
-
-    items.forEach(i => {
-      map[sellerId].amount += n(i.price) * n(i.quantity);
-      map[sellerId].unitCount += n(i.quantity);
-    });
-  });
-
-  const totalSaleCount = sales.length;
-
-  const appendEmpty = (box, message) => {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = message;
-    box.appendChild(empty);
-  };
-
-  if (totalSaleCount === 0) {
-    appendEmpty(boxTop, "Aucune vente sur cette période");
-    appendEmpty(boxWeak, "Aucun vendeur à comparer");
-    return;
-  }
-
-  const ranked = Object.entries(map)
-    .filter(([, v]) => v.saleCount > 0)
-    .map(([id, v]) => ({
-      id,
-      v,
-      share: (v.saleCount / totalSaleCount) * 100
-    }));
-
-  const topSellers = ranked
-    .filter(entry => entry.share >= SELLER_SHARE_THRESHOLD)
-    .sort((a, b) => b.share - a.share)
-    .slice(0, 5);
-
-  const weakSellers = ranked
-    .filter(entry => entry.share < SELLER_SHARE_THRESHOLD)
-    .sort((a, b) => a.share - b.share)
-    .slice(0, 5);
-
-  const renderList = (box, data, badge = null) => {
-    data.forEach(({ id, v, share }) => {
-      const el = document.createElement("div");
-      el.className = "list-item";
-
-      const left = document.createElement("div");
-      left.className = "list-left";
-
-      const title = document.createElement("div");
-      title.className = "list-title";
-      title.textContent = resolveSellerName(id);
-
-      const sub = document.createElement("div");
-      sub.className = "list-sub";
-      sub.textContent =
-        `${v.saleCount} vente(s) • ${share.toFixed(1)}% du total`;
-
-      const value = document.createElement("div");
-      value.className = "list-value";
-      value.textContent = formatMoney(v.amount);
-
-      if (badge) {
-        const tag = document.createElement("div");
-        tag.className = `badge ${badge}`;
-        tag.textContent = badge === "badge-green" ? "TOP" : "LOW";
-        left.appendChild(tag);
-      }
-
-      left.appendChild(title);
-      left.appendChild(sub);
-
-      el.appendChild(left);
-      el.appendChild(value);
-
-      box.appendChild(el);
-    });
-  };
-
-  if (topSellers.length === 0) {
-    appendEmpty(boxTop, `Aucun vendeur ≥ ${SELLER_SHARE_THRESHOLD}% des ventes`);
-  } else {
-    renderList(boxTop, topSellers, "badge-green");
-  }
-
-  if (weakSellers.length === 0) {
-    appendEmpty(boxWeak, `Aucun vendeur < ${SELLER_SHARE_THRESHOLD}% des ventes`);
-  } else {
-    renderList(boxWeak, weakSellers, "badge-orange");
-  }
 }
 

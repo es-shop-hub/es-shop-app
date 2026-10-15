@@ -13,7 +13,7 @@ const DRAWER_HUB_ITEM = {
   icon: "◆"
 };
 
-const DRAWER_PUBLIC_VERSION = "2";
+const DRAWER_PUBLIC_VERSION = "4";
 
 const DRAWER_PUBLIC_SECTIONS = [
   {
@@ -48,6 +48,7 @@ const DRAWER_PUBLIC_SECTIONS = [
     items: [
       { href: "pages.html", label: "Navigation", icon: "📂" },
       { href: "stats.html", label: "Statistiques", icon: "📊" },
+      { href: "vendeurs.html", label: "Vendeurs", icon: "👤" },
       { href: "ranging.html", label: "Ranking", icon: "🏆" },
       { href: "loader.html", label: "Vue rapide", icon: "📩" }
     ]
@@ -64,8 +65,7 @@ const DRAWER_PUBLIC_SECTIONS = [
     items: [
       { href: "settings.html", label: "Paramètres", icon: "⚙️" },
       { href: "help.html", label: "Aide", icon: "🤝" },
-      { href: "billing-info/billing.html", label: "Quotas & sécurité", icon: "☁️" },
-      { href: "login.html", label: "Se déconnecter", icon: "🚪", action: "logout" }
+      { href: "billing-info/billing.html", label: "Quotas & sécurité", icon: "☁️" }
     ]
   }
 ];
@@ -214,18 +214,6 @@ async function handleDrawerLogout() {
 }
 
 function createDrawerPublicItem(item) {
-  if (item.action === "logout") {
-    const btn = createDrawerNode("button", "drawer-item");
-    btn.type = "button";
-    btn.setAttribute("data-action", "logout");
-    appendDrawerItemParts(btn, item);
-    btn.addEventListener("click", () => {
-      closeDrawerIfMobile();
-      handleDrawerLogout();
-    });
-    return btn;
-  }
-
   const link = createDrawerNode("a", "drawer-item");
   link.setAttribute("data-href", item.href);
   link.href = resolveDrawerHref(item.href);
@@ -243,22 +231,74 @@ function createDrawerPublicItem(item) {
   return link;
 }
 
+function createDrawerLogoutButton() {
+  const btn = createDrawerNode("button", "drawer-item drawer-logout");
+  btn.type = "button";
+  btn.id = "sfDrawerLogout";
+  btn.setAttribute("data-action", "logout");
+  appendDrawerItemParts(btn, {
+    label: "Se déconnecter",
+    icon: "🚪"
+  });
+  btn.addEventListener("click", () => {
+    if (!window.confirm("Se déconnecter ?")) {
+      return;
+    }
+    closeDrawerIfMobile();
+    handleDrawerLogout();
+  });
+  return btn;
+}
+
+function ensureDrawerFooter(dock) {
+  if (!dock) {
+    return null;
+  }
+  let footer = dock.querySelector(":scope > #sfDrawerFooter");
+  if (footer) {
+    return footer;
+  }
+  footer = createDrawerNode("div", "drawer-footer");
+  footer.id = "sfDrawerFooter";
+  dock.appendChild(footer);
+  return footer;
+}
+
+function renderDrawerLogoutFooter(dock) {
+  const footer = ensureDrawerFooter(dock);
+  if (!footer) {
+    return;
+  }
+  if (footer.dataset.sfLogoutReady === DRAWER_PUBLIC_VERSION) {
+    return;
+  }
+  footer.replaceChildren(createDrawerLogoutButton());
+  footer.dataset.sfLogoutReady = DRAWER_PUBLIC_VERSION;
+}
+
 function ensureDrawerDock(drawer) {
   if (!drawer) {
     return null;
   }
   let dock = drawer.querySelector(":scope > .drawer-dock");
   if (dock) {
+    ensureDrawerFooter(dock);
     return dock;
   }
   const brand = drawer.querySelector(".drawer-brand");
   const scroll = drawer.querySelector(".drawer-scroll");
+  const footer = drawer.querySelector("#sfDrawerFooter");
   dock = createDrawerNode("div", "drawer-dock");
   if (brand) {
     dock.appendChild(brand);
   }
   if (scroll) {
     dock.appendChild(scroll);
+  }
+  if (footer) {
+    dock.appendChild(footer);
+  } else {
+    ensureDrawerFooter(dock);
   }
   drawer.replaceChildren(dock);
   return dock;
@@ -277,8 +317,8 @@ function ensureDrawerDomShell() {
   let adminNav = shell.adminNav;
 
   if (brand && scroll && nav && adminNav) {
-    ensureDrawerDock(drawer);
-    return { brand, nav };
+    const dock = ensureDrawerDock(drawer);
+    return { brand, nav, dock };
   }
 
   drawer.replaceChildren();
@@ -299,9 +339,10 @@ function ensureDrawerDomShell() {
 
   scrollEl.append(nav, adminNav);
   dock.append(brand, scrollEl);
+  ensureDrawerFooter(dock);
   drawer.appendChild(dock);
 
-  return { brand, nav };
+  return { brand, nav, dock };
 }
 
 function renderDrawerPublicShell() {
@@ -337,7 +378,14 @@ function renderDrawerPublicShell() {
     shell.brand.dataset.sfPublicReady = "1";
   }
 
+  const dock =
+    shell.dock ||
+    (shell.brand && shell.brand.closest
+      ? shell.brand.closest(".drawer-dock")
+      : null);
+
   if (shell.nav.dataset.sfPublicReady === DRAWER_PUBLIC_VERSION) {
+    renderDrawerLogoutFooter(dock);
     return;
   }
 
@@ -363,6 +411,7 @@ function renderDrawerPublicShell() {
 
   shell.nav.appendChild(fragment);
   shell.nav.dataset.sfPublicReady = DRAWER_PUBLIC_VERSION;
+  renderDrawerLogoutFooter(dock);
 }
 
 function ensureDrawerCriticalStyles() {
@@ -480,6 +529,7 @@ function ensureAppShell() {
 
     scroll.append(nav, adminNav);
     dock.append(brand, scroll);
+    ensureDrawerFooter(dock);
     drawer.appendChild(dock);
     document.body.appendChild(drawer);
   } else {

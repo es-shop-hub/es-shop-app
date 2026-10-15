@@ -355,12 +355,21 @@ nav .nav-item.active{
 }
 </style>
 <link rel="stylesheet" href="css/drawer.css">
+<link rel="stylesheet" href="css/page-links.css">
 </head>
 <body>
 
 <div class="header">
   <h1>🏆 StockFlow Ranking</h1>
   <p>Classement par volume de ventes, rentabilité (marge), chiffre d'affaires et niveau de stock — données issues de <strong>sale_items</strong> et <strong>products</strong>.</p>
+</div>
+
+<div class="page-links-bar" id="rangingTopBar">
+  <div class="page-links" id="rangingPageLinks" role="navigation" aria-label="Pages liées">
+    <a href="stats.html">Statistiques</a>
+    <a href="vendus.html">Vendus</a>
+    <a href="clients.html">Clients</a>
+  </div>
 </div>
 
 <div class="toolbar">
@@ -428,7 +437,7 @@ nav .nav-item.active{
   <div class="section-title">
     <div>
       <h2>📉 Moins vendus</h2>
-      <p>Produits avec le plus faible volume de ventes sur la période.</p>
+      <p>Produits avec le plus faible volume de ventes sur la période (y compris 0 vente).</p>
     </div>
   </div>
   <div class="rank-grid" id="leastSoldProducts"></div>
