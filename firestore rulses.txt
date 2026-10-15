@@ -169,6 +169,7 @@ service cloud.firestore {
       allow read, write: if signedIn();
     }
 
+    // ── Clients / récompenses (registre interne lié à sales.clientName) ─────
     match /clients/{id} {
       allow read, write: if signedIn();
     }

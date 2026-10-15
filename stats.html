@@ -552,21 +552,79 @@ main{
   line-height:1.5;
 }
 
-a.shortcut-link{
-  display:block;
+.shortcut-btns{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+
+@media (min-width:640px){
+  .shortcut-btns{
+    grid-template-columns:1fr 1fr;
+  }
+}
+
+a.shortcut-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  min-height:48px;
+  padding:14px 18px;
+  border:none;
+  border-radius:12px;
+  background:var(--primary);
+  color:#fff;
+  font-size:15px;
+  font-weight:700;
   text-decoration:none;
-  color:inherit;
+  text-align:center;
   cursor:pointer;
-  transition:transform .12s ease, box-shadow .12s ease;
+  box-shadow:0 2px 0 #07261c;
+  transition:transform .1s ease, filter .15s ease, box-shadow .15s ease;
 }
 
-a.shortcut-link:hover{
+a.shortcut-btn:hover{
+  filter:brightness(1.08);
   transform:translateY(-1px);
-  box-shadow:0 4px 14px rgba(0,0,0,0.1);
+  box-shadow:0 4px 0 #07261c;
 }
 
-a.shortcut-link:active{
-  transform:scale(0.99);
+a.shortcut-btn:active{
+  transform:translateY(1px);
+  box-shadow:0 1px 0 #07261c;
+}
+
+a.shortcut-btn.gold{
+  background:var(--gold);
+  color:#111;
+  box-shadow:0 2px 0 #9a7b18;
+}
+
+a.shortcut-btn.gold:hover{
+  box-shadow:0 4px 0 #9a7b18;
+}
+
+a.shortcut-btn.gold:active{
+  box-shadow:0 1px 0 #9a7b18;
+}
+
+a.shortcut-btn.blue{
+  background:#2563EB;
+  box-shadow:0 2px 0 #1e40af;
+}
+
+a.shortcut-btn.blue:hover{
+  box-shadow:0 4px 0 #1e40af;
+}
+
+a.shortcut-btn.orange{
+  background:#E37400;
+  box-shadow:0 2px 0 #9a4e00;
+}
+
+a.shortcut-btn.orange:hover{
+  box-shadow:0 4px 0 #9a4e00;
 }
 
 /* ACTIVITY */
@@ -758,6 +816,7 @@ nav .nav-item.active{
 
 }
 </style>
+<link rel="stylesheet" href="css/drawer.css">
 </head>
 <body id="statsPage">
 
@@ -1243,79 +1302,27 @@ Clients non soldés
     <div class="section-header">
       <div>
         <div class="section-title">Raccourcis</div>
-        <div class="section-subtitle">Accès rapide aux pages</div>
+        <div class="section-subtitle">Boutons d'accès rapide</div>
       </div>
     </div>
 
-    <div class="alerts" id="shortcutsContainer">
-
-      <a class="alert shortcut-link" id="shortcutExpenses" href="expenses.html">
-        <div class="alert-title">💸 Dépenses</div>
-        <div class="alert-text">Ouvrir la page Dépenses</div>
-      </a>
-
-      <a class="alert low shortcut-link" id="shortcutDebts" href="debts.html">
-        <div class="alert-title">🧾 Dettes</div>
-        <div class="alert-text">Ouvrir la page Dettes</div>
-      </a>
-
-      <a class="alert shortcut-link" id="shortcutClients" href="clients.html" style="border-left-color:#2563EB;">
-        <div class="alert-title">👥 Clients</div>
-        <div class="alert-text">Apport, récurrents, récompenses</div>
-      </a>
-
-      <a class="alert low shortcut-link" id="shortcutRanging" href="ranging.html">
-        <div class="alert-title">🏆 Ranking</div>
-        <div class="alert-text">CA, bénéfices, produits faibles</div>
-      </a>
-
-      <a class="alert shortcut-link" id="shortcutBatch" href="batch/batch_stats.html" style="border-left-color:#E37400;">
-        <div class="alert-title">📦 Stats lots</div>
-        <div class="alert-text">Marges et performance batch</div>
-      </a>
-
-      <a class="alert low shortcut-link" id="shortcutProducts" href="products.html">
-        <div class="alert-title">📦 Produits</div>
-        <div class="alert-text">Gestion du stock</div>
-      </a>
-
+    <div class="shortcut-btns" id="shortcutsContainer">
+      <a class="shortcut-btn gold" id="shortcutExpenses" href="expenses.html">💸 Dépenses</a>
+      <a class="shortcut-btn" id="shortcutDebts" href="debts.html">🧾 Dettes</a>
+      <a class="shortcut-btn blue" id="shortcutClients" href="clients.html">👥 Clients</a>
+      <a class="shortcut-btn gold" id="shortcutRanging" href="ranging.html">🏆 Ranking</a>
+      <a class="shortcut-btn orange" id="shortcutBatch" href="batch/batch_stats.html">📦 Stats lots</a>
+      <a class="shortcut-btn" id="shortcutProducts" href="products.html">📦 Produits</a>
     </div>
 
   </section>
 
 </main>
 
-<nav class="bottom-nav">
-
-  <a href="index.html" class="nav-item" data-page="index.html">
-    🛒 Vente
-  </a>
-
-  <a href="products.html" class="nav-item" data-page="products.html">
-    📦 Produits
-  </a>
-
-  <a href="vendus.html" class="nav-item" data-page="vendus.html">
-    📋 Vendus
-  </a>
-
-  <a href="loader.html" class="nav-item" data-page="loader.html">
-    📩 vue rapide
-  </a>
-
-  <a href="stats.html" class="nav-item active" data-page="stats.html">
-    📊 Stats
-  </a>
-
-  <a href="pages.html" class="nav-item" data-page="pages.html">
-    🔗 Navigation
-  </a>
-
-</nav>
-
-<script src="js/nav.js"></script>
 <script type="module" src="js/stats.js"></script>
 
+<script src="js/drawer.js" defer></script>
+<script src="js/nav.js" defer></script>
 </body>
 
 </html>

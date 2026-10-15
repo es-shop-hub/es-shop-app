@@ -53,6 +53,7 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
 .nav-item{flex:1;text-align:center;text-decoration:none;color:#aaa;font-size:11px;padding:8px 4px}
 .nav-item.active{color:#D4AF37}
 </style>
+<link rel="stylesheet" href="css/drawer.css">
 </head>
 <body>
 
@@ -143,14 +144,8 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
   <div class="list" id="recoList"></div>
 </section>
 
-<nav>
-  <a class="nav-item" href="purchases.html">Achats</a>
-  <a class="nav-item active" href="suppliers.html">Fournisseurs</a>
-  <a class="nav-item" href="stats.html">Stats</a>
-  <a class="nav-item" href="debts.html">Dettes</a>
-  <a class="nav-item" href="pages.html">Nav</a>
-</nav>
-
 <script type="module" src="js/suppliers.js"></script>
+<script src="js/drawer.js" defer></script>
+<script src="js/nav.js" defer></script>
 </body>
 </html>

@@ -32,19 +32,34 @@ import { upsertClientByName } from "./clients-service.js";
 
 
 // --- DOM ---
-const paymentType = document.getElementById('paymentType');
-const amountPaidInput = document.getElementById('amountPaid');
 const clientNameInput = document.getElementById('clientName');
+const cartModeBtns = document.getElementById('cartModeBtns');
+const creditPanel = document.getElementById('creditPanel');
+const creditRemainingEl = document.getElementById('creditRemaining');
+const amountPaidInput = document.getElementById('amountPaid');
+const btnSellCash = document.getElementById('btnSellCash');
+const btnSellCredit = document.getElementById('btnSellCredit');
+const btnConfirmCredit = document.getElementById('btnConfirmCredit');
+const btnCancelCredit = document.getElementById('btnCancelCredit');
 
 const status = document.getElementById("status");
 
 const productsContainer = document.getElementById('productsContainer');
 const cartDom = document.querySelector('.cart');
-const cartTotalDom = cartDom.querySelector('.total');
-const sellBtn = cartDom.querySelector('.sell-btn');
+const cartBody = document.getElementById('cartBody') || cartDom;
+const paymentBox = document.getElementById('paymentBox');
+const cartTotalDom = document.getElementById('cartTotal') || cartBody.querySelector('.total');
+const cartTotalAmountEl = document.getElementById('cartTotalAmount');
+const cartItemsAnchor = paymentBox || cartTotalDom;
+const cartScrollUpBtn = document.getElementById('cartScrollUp');
+const cartScrollDownBtn = document.getElementById('cartScrollDown');
+const CART_SCROLL_STEP = 80;
 const manualDateCheckbox = document.getElementById('manualDate');
 const saleDateInput = document.getElementById('saleDate');
 const searchInput = document.getElementById('searchInput');
+
+/** @type {"choose" | "credit"} */
+let cartMode = "choose";
 
 let CURRENCY_SYMBOL = "$";
 
@@ -88,39 +103,103 @@ manualDateCheckbox.addEventListener("change", () => {
 });
 
 
-// ---- open debts input 
-function togglePaymentInput() {
-  const isPartial = paymentType?.value === "partial";
+function setCartMode(mode) {
+  cartMode = mode === "credit" ? "credit" : "choose";
 
-  amountPaidInput.style.display = isPartial ? "block" : "none";
+  const isCredit = cartMode === "credit";
 
-  if (!isPartial) {
-    amountPaidInput.value = "";
+  if (cartModeBtns) {
+    cartModeBtns.classList.toggle("hidden", isCredit);
   }
+
+  if (creditPanel) {
+    creditPanel.classList.toggle("hidden", !isCredit);
+    creditPanel.setAttribute("aria-hidden", isCredit ? "false" : "true");
+  }
+
+  cartDom?.classList.toggle("cart-credit-open", isCredit);
+
+  if (isCredit) {
+    // Panier replié (translateY) : rouvrir pour voir le formulaire crédit
+    cartDom?.classList.remove("hidden");
+    updateCreditRemainingDisplay();
+    requestAnimationFrame(() => {
+      amountPaidInput?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth"
+      });
+      amountPaidInput?.focus({ preventScroll: false });
+      updateCartScrollButtons();
+    });
+  } else {
+    updateCartScrollButtons();
+  }
+}
+
+function updateCartScrollButtons() {
+  if (!cartBody) return;
+
+  const maxScroll = Math.max(0, cartBody.scrollHeight - cartBody.clientHeight);
+  const top = cartBody.scrollTop;
+  const canScroll = maxScroll > 2;
+
+  if (cartScrollUpBtn) {
+    cartScrollUpBtn.disabled = !canScroll || top <= 2;
+  }
+  if (cartScrollDownBtn) {
+    cartScrollDownBtn.disabled = !canScroll || top >= maxScroll - 2;
+  }
+}
+
+function scrollCartBy(delta) {
+  if (!cartBody) return;
+  cartBody.scrollBy({ top: delta, behavior: "smooth" });
+  requestAnimationFrame(updateCartScrollButtons);
+  setTimeout(updateCartScrollButtons, 320);
+}
+
+function getCartTotalAmount() {
+  let total = 0;
+  for (const item of cart) {
+    total += item.qty * item.price;
+  }
+  return total;
+}
+
+function getOptionalCreditPaid() {
+  const raw = amountPaidInput?.value;
+  if (raw === "" || raw === null || raw === undefined) {
+    return 0;
+  }
+  const val = Number(raw);
+  if (!Number.isFinite(val) || val < 0) {
+    throw new Error("Montant payé invalide");
+  }
+  return val;
+}
+
+function updateCreditRemainingDisplay() {
+  if (!creditRemainingEl) return;
+  const total = getCartTotalAmount();
+  let paid = 0;
+  try {
+    paid = getOptionalCreditPaid();
+  } catch {
+    paid = 0;
+  }
+  if (paid > total) paid = total;
+  const remaining = Math.max(0, total - paid);
+  creditRemainingEl.textContent =
+    `Reste dû (Dette) : ${Math.round(remaining).toLocaleString("fr-FR")} ${CURRENCY_SYMBOL}`;
 }
 
 function resetSaleFormUI() {
   cart = [];
-  updateCartUI();
   if (clientNameInput) clientNameInput.value = "";
-  if (paymentType) paymentType.value = "paid";
-  if (amountPaidInput) {
-    amountPaidInput.value = "";
-    amountPaidInput.style.display = "none";
-  }
-  togglePaymentInput();
+  if (amountPaidInput) amountPaidInput.value = "";
+  setCartMode("choose");
+  updateCartUI();
 }
-
-// INIT
-document.addEventListener("DOMContentLoaded", () => {
-  togglePaymentInput();
-});
-
-// EVENTS
-paymentType.addEventListener('change', togglePaymentInput);
-
-// 🔥 IMPORTANT : sync initial state au chargement
-togglePaymentInput();
 
 // --- STATE ---
 let cart = [];
@@ -500,7 +579,7 @@ function removeFromCart(id) {
 function updateCartUI() {
 
   // 🔥 supprimer UNIQUEMENT anciens items
-  cartDom
+  cartBody
     .querySelectorAll(".cart-item")
     .forEach(el => el.remove());
 
@@ -641,19 +720,56 @@ function updateCartUI() {
     frag.appendChild(div);
   });
 
-  // 🔥 INSERT SAFE
-  cartDom.insertBefore(
+  // 🔥 INSERT SAFE — items avant payment-box (paiement / crédit visibles en bas)
+  cartBody.insertBefore(
     frag,
-    cartTotalDom
+    cartItemsAnchor
   );
 
   // 🔥 TOTAL SAFE
-  cartTotalDom.textContent =
-  `Total: ${total.toFixed(2)} ${CURRENCY_SYMBOL}`;
+  const amountText = `${Math.round(total).toLocaleString("fr-FR")} ${CURRENCY_SYMBOL}`;
+  if (cartTotalAmountEl) {
+    cartTotalAmountEl.textContent = amountText;
+  } else if (cartTotalDom) {
+    cartTotalDom.textContent = `Total : ${amountText}`;
+  }
+
+  updateCreditRemainingDisplay();
+  updateCartScrollButtons();
 }
 
 // calculator pour dettes 
 function computePayment(totalAmount, paymentMode, inputAmount) {
+
+  if (!(totalAmount > 0)) {
+    throw new Error("Total invalide");
+  }
+
+  // Crédit : avance optionnelle (vide / 0 = dette totale)
+  if (paymentMode === "credit") {
+    let amount_paid = 0;
+
+    if (
+      inputAmount !== "" &&
+      inputAmount !== null &&
+      inputAmount !== undefined
+    ) {
+      const val = Number(inputAmount);
+      if (isNaN(val)) throw new Error("Montant invalide");
+      if (val < 0 || val >= totalAmount) {
+        throw new Error("Montant partiel incorrect");
+      }
+      amount_paid = val;
+    }
+
+    const amount_remaining = totalAmount - amount_paid;
+    return {
+      payment_status: "partial",
+      amount_paid,
+      amount_remaining,
+      hasDebt: true
+    };
+  }
 
   let amount_paid = totalAmount;
 
@@ -666,7 +782,7 @@ function computePayment(totalAmount, paymentMode, inputAmount) {
     const val = Number(inputAmount);
 
     if (isNaN(val)) throw new Error("Montant invalide");
-    if (val <= 0 || val >= totalAmount) {
+    if (val < 0 || val >= totalAmount) {
       throw new Error("Montant partiel incorrect");
     }
 
@@ -681,6 +797,14 @@ function computePayment(totalAmount, paymentMode, inputAmount) {
     amount_remaining,
     hasDebt: amount_remaining > 0
   };
+}
+
+function buildCashPayment(totalAmount) {
+  return computePayment(totalAmount, "full");
+}
+
+function buildCreditPayment(totalAmount) {
+  return computePayment(totalAmount, "credit", amountPaidInput?.value);
 }
 
 // --- onLine ---
@@ -993,135 +1117,160 @@ async function processSaleOnline(data) {
 }
 
 // --- SELL (ANTI DOUBLE) ---
-bindActionButton(sellBtn, async () => {
-
+async function submitSale(paymentBuilder) {
   if (!cart.length) return;
 
+  await checkUser(currentUserId);
+
+  let totalAmount = 0;
+  let totalProfit = 0;
+
+  for (const item of cart) {
+    totalAmount += item.qty * item.price;
+    totalProfit += (item.price - item.price_buy) * item.qty;
+  }
+
+  const name = (clientNameInput?.value || "").trim();
+  if (!name) {
+    alert("Le nom du client est obligatoire");
+    clientNameInput?.focus();
+    return;
+  }
+
+  const payment = paymentBuilder(totalAmount);
+
+  let saleDate;
   try {
+    saleDate = getSaleDate();
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
 
-    await checkUser(currentUserId);
+  const payload = {
+    cart: structuredClone(cart),
+    sellerId: currentUserId,
+    name,
+    payment,
+    saleDate,
+    totalAmount,
+    totalProfit
+  };
 
-    // ⚡ UNE SEULE LOOP (optimisation importante)
-    let totalAmount = 0;
-    let totalProfit = 0;
+  if (isOffline()) {
+    addToQueue({
+      type: "SALE",
+      data: payload
+    });
 
-    for (const item of cart) {
-      totalAmount += item.qty * item.price;
-      totalProfit += (item.price - item.price_buy) * item.qty;
-    }
-
-    const paymentMode = paymentType.value;
-
-    const name = (clientNameInput?.value || "").trim();
-    if (!name) {
-      alert("Le nom du client est obligatoire");
-      clientNameInput?.focus();
-      return;
-    }
-
-    const payment = computePayment(
-      totalAmount,
-      paymentMode,
-      amountPaidInput.value
-    );
-
-    let saleDate;
-
-    try {
-      saleDate = getSaleDate();
-    } catch (e) {
-      alert(e.message);
-      return;
-    }
-
-    const payload = {
-      cart: structuredClone(cart),
-      sellerId: currentUserId,
+    const receiptData = {
+      saleId: `OFFLINE-${Date.now()}`,
       name,
-      payment,
-      saleDate,
-      totalAmount,
-      totalProfit
+      items: cart.map(i => ({
+        name: i.name,
+        qty: i.qty,
+        price: i.price
+      })),
+      total: totalAmount,
+      amountPaid: payment.amount_paid,
+      remaining: payment.amount_remaining,
+      paymentMode: payment.payment_status,
+      date: new Date(saleDate),
+      offline: true
     };
-
-    // ======================
-    // OFFLINE MODE (UNCHANGED LOGIC)
-    // ======================
-    if (isOffline()) {
-
-      addToQueue({
-        type: "SALE",
-        data: payload
-      });
-
-      // ⚡ UI RESET AVANT PDF (UX plus rapide)
-      const receiptData = {
-        saleId: `OFFLINE-${Date.now()}`,
-        name,
-        items: cart.map(i => ({
-          name: i.name,
-          qty: i.qty,
-          price: i.price
-        })),
-        total: totalAmount,
-        amountPaid: payment.amount_paid,
-        remaining: payment.amount_remaining,
-        paymentMode: payment.payment_status,
-        date: new Date(saleDate),
-        offline: true
-      };
-
-      resetSaleFormUI();
-
-      try {
-        await generateReceipt(receiptData);
-      } catch (err) {
-        console.warn("Receipt offline failed:", err);
-      }
-
-      showOfflineWarning();
-      showSyncToast("📦 Vente enregistrée hors ligne", "warning");
-
-      return;
-    }
-
-    // ======================
-    // ONLINE MODE
-    // ======================
-    const saleId = await processSaleOnline(payload);
-
-    if (!saleId) return;
-
-    // ⚡ reset formulaire PLUS TÔT (UX fluide)
-    const receiptItems = cart.map(i => ({
-      name: i.name,
-      qty: i.qty,
-      price: i.price
-    }));
 
     resetSaleFormUI();
 
     try {
-      await generateReceipt({
-        saleId,
-        name,
-        items: receiptItems,
-        total: totalAmount,
-        amountPaid: payment.amount_paid,
-        remaining: payment.amount_remaining,
-        paymentMode: payment.payment_status,
-        date: new Date(saleDate)
-      });
+      await generateReceipt(receiptData);
     } catch (err) {
-      console.warn("Receipt failed:", err);
+      console.warn("Receipt offline failed:", err);
     }
 
-    showSyncToast("📦 Vente ok", "warning");
+    showOfflineWarning();
+    showSyncToast("📦 Vente enregistrée hors ligne", "warning");
+    return;
+  }
 
+  const saleId = await processSaleOnline(payload);
+  if (!saleId) return;
+
+  const receiptItems = cart.map(i => ({
+    name: i.name,
+    qty: i.qty,
+    price: i.price
+  }));
+
+  resetSaleFormUI();
+
+  try {
+    await generateReceipt({
+      saleId,
+      name,
+      items: receiptItems,
+      total: totalAmount,
+      amountPaid: payment.amount_paid,
+      remaining: payment.amount_remaining,
+      paymentMode: payment.payment_status,
+      date: new Date(saleDate)
+    });
+  } catch (err) {
+    console.warn("Receipt failed:", err);
+  }
+
+  showSyncToast("📦 Vente ok", "warning");
+}
+
+bindActionButton(btnSellCash, async () => {
+  try {
+    await submitSale(buildCashPayment);
   } catch (e) {
     alert(e.message);
   }
 });
+
+btnSellCredit?.addEventListener("click", () => {
+  if (!cart.length) {
+    alert("Panier vide");
+    return;
+  }
+  if (amountPaidInput) amountPaidInput.value = "";
+  setCartMode("credit");
+});
+
+amountPaidInput?.addEventListener("input", () => {
+  updateCreditRemainingDisplay();
+});
+
+bindActionButton(btnConfirmCredit, async () => {
+  try {
+    await submitSale(buildCreditPayment);
+  } catch (e) {
+    alert(e.message);
+  }
+});
+
+btnCancelCredit?.addEventListener("click", () => {
+  if (amountPaidInput) amountPaidInput.value = "";
+  setCartMode("choose");
+});
+
+cartScrollUpBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  scrollCartBy(-CART_SCROLL_STEP);
+});
+
+cartScrollDownBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  scrollCartBy(CART_SCROLL_STEP);
+});
+
+cartBody?.addEventListener("scroll", () => {
+  updateCartScrollButtons();
+}, { passive: true });
+
+setCartMode("choose");
+updateCartScrollButtons();
 
 // --- INIT ---
 onAuthStateChanged(auth, async (user) => {
@@ -1148,8 +1297,4 @@ setupNetworkListeners(async () => {
 registerServiceWorker();
 
 setupInstallButton();
-function resetPaymentUI() {
-  amountPaidInput.value = "";
-  amountPaidInput.style.display = "none";
-  }
- 
+

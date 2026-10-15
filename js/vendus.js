@@ -8,6 +8,8 @@ import {
   where,
   orderBy,
   updateDoc,
+  writeBatch,
+  increment,
   writeLog,
   Timestamp
 } from "./firebase.js";
@@ -21,6 +23,8 @@ import {
 import { bindActionButton } from "./utils/buttonManager.js";
 
 const $ = id => document.getElementById(id);
+
+const CANCEL_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 const state = {
   sales: [],
@@ -68,6 +72,43 @@ function getDate(v) {
 
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
+}
+
+function isWithinCancelWindow(createdAt) {
+  const date = createdAt instanceof Date ? createdAt : getDate(createdAt);
+  if (!date) return false;
+  return Date.now() - date.getTime() <= CANCEL_WINDOW_MS;
+}
+
+function confirmCancelSaleTriple() {
+  if (!window.confirm("Annuler cette vente ? Le stock sera rétabli.")) {
+    return false;
+  }
+  if (
+    !window.confirm(
+      "Confirmation 2/3 : cette action est irréversible. Continuer ?"
+    )
+  ) {
+    return false;
+  }
+  if (
+    !window.confirm(
+      "Confirmation 3/3 : annuler définitivement la vente ?"
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function getCurrentUserId() {
+  return (
+    currentUser?.userId ||
+    currentUser?.uid ||
+    currentUser?.id ||
+    auth.currentUser?.uid ||
+    ""
+  );
 }
 
 function buildDateRange() {
@@ -571,21 +612,182 @@ function createSaleCard(row, showClientEdit = false) {
   card.appendChild(dateMeta);
   card.appendChild(badge);
 
-  if (showClientEdit && row.saleStatus !== "cancelled" && row.saleId) {
+  const canActOnSale =
+    showClientEdit &&
+    row.saleStatus !== "cancelled" &&
+    row.saleId;
+
+  if (canActOnSale) {
+    const actions = document.createElement("div");
+    actions.className = "sale-card-actions";
+
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "btn-edit-client";
     editBtn.id = `editClient_${row.saleId}`;
     editBtn.textContent = "Modifier client";
-    editBtn.style.cssText =
-      "margin-top:8px;padding:6px 10px;border-radius:8px;border:1px solid rgba(212,175,55,0.5);background:#1a1a1a;color:#D4AF37;font-size:12px;cursor:pointer;";
     bindActionButton(editBtn, async () => {
       await editSaleClientName(row.saleId, row.clientName);
     });
-    card.appendChild(editBtn);
+    actions.appendChild(editBtn);
+
+    if (isWithinCancelWindow(row.createdAt)) {
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "btn-cancel-sale";
+      cancelBtn.id = `cancelSale_${row.saleId}`;
+      cancelBtn.textContent = "Annuler la vente";
+      bindActionButton(cancelBtn, async () => {
+        await requestCancelSale(row.saleId);
+      });
+      actions.appendChild(cancelBtn);
+    }
+
+    card.appendChild(actions);
   }
 
   return card;
+}
+
+async function requestCancelSale(saleId) {
+  if (!saleId) return;
+  if (!confirmCancelSaleTriple()) return;
+  await cancelSale(saleId);
+}
+
+async function cancelSale(saleId) {
+  if (!saleId) return;
+
+  const userId = getCurrentUserId();
+
+  try {
+    const saleRef = doc(db, "sales", saleId);
+    const saleSnap = await getDoc(saleRef);
+
+    if (!saleSnap.exists()) {
+      alert("Vente introuvable.");
+      return;
+    }
+
+    const sale = saleSnap.data();
+    const saleStatus = sale.status || "active";
+
+    if (saleStatus === "cancelled") {
+      alert("Cette vente est déjà annulée.");
+      return;
+    }
+
+    if (!isWithinCancelWindow(sale.createdAt)) {
+      alert("Annulation impossible : la vente a plus de 48 heures.");
+      return;
+    }
+
+    const [itemsSnap, debtsSnap] = await Promise.all([
+      getDocs(query(collection(db, "sale_items"), where("saleId", "==", saleId))),
+      getDocs(
+        query(collection(db, "debts"), where("relatedSaleId", "==", saleId))
+      )
+    ]);
+
+    const items = itemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const relatedDebts = debtsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const debtWithPayment = relatedDebts.find(d => n(d.amount_paid) > 0);
+    if (debtWithPayment) {
+      alert(
+        "Annulation impossible : un paiement a déjà été enregistré sur la dette liée."
+      );
+      return;
+    }
+
+    if (!items.length) {
+      alert("Aucun article trouvé pour cette vente.");
+      return;
+    }
+
+    const stockByProduct = new Map();
+    for (const item of items) {
+      const productId = item.productId;
+      const qty = n(item.quantity);
+      if (!productId || qty <= 0) continue;
+      stockByProduct.set(
+        productId,
+        (stockByProduct.get(productId) || 0) + qty
+      );
+    }
+
+    const now = Timestamp.now();
+    const batch = writeBatch(db);
+
+    batch.update(saleRef, {
+      status: "cancelled",
+      updatedAt: now
+    });
+
+    for (const debt of relatedDebts) {
+      if ((debt.status || "") === "cancelled") continue;
+      batch.update(doc(db, "debts", debt.id), {
+        status: "cancelled",
+        updatedAt: now
+      });
+    }
+
+    for (const item of items) {
+      const qty = n(item.quantity);
+      if (!item.productId || qty <= 0) continue;
+
+      const moveRef = doc(collection(db, "stock_movements"));
+      const movePayload = {
+        productId: item.productId,
+        type: "IN",
+        quantity: qty,
+        reason: "correction",
+        referenceId: saleId,
+        createdBy: userId,
+        createdAt: now
+      };
+
+      if (item.expirationDate != null) {
+        movePayload.expirationDate = item.expirationDate;
+      }
+      if (item.batchId) {
+        movePayload.batchId = item.batchId;
+      }
+
+      batch.set(moveRef, movePayload);
+    }
+
+    for (const [productId, qty] of stockByProduct) {
+      batch.update(doc(db, "products", productId), {
+        stock_current: increment(qty),
+        updatedAt: now
+      });
+    }
+
+    await batch.commit();
+
+    await writeLog({
+      userId,
+      action: "sale_cancel",
+      targetId: saleId,
+      details: {
+        itemCount: items.length,
+        productIds: [...stockByProduct.keys()]
+      }
+    });
+
+    const debtsRefresh = await getDocs(collection(db, "debts"));
+    state.debts = debtsRefresh.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    alert("Vente annulée. Stock rétabli.");
+    await loadData();
+  } catch (err) {
+    console.error("[vendus] cancelSale", err);
+    alert(err?.message || "Impossible d'annuler la vente.");
+  }
 }
 
 async function editSaleClientName(saleId, currentName) {

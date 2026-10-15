@@ -493,3 +493,377 @@ Priorité déploiement :
   7. productId ASC, createdAt ASC          (FIFO stock_movements — perf)
   8. status ASC, DueDate ASC               (debts — échéances)
   9. le reste                              (finances, pertes, achats période)
+
+
+---
+
+================================================================
+AJOUT FIN — COHÉRENT APP ACTUELLE (clients / rewards / batch / demandes / suppliers)
+Ne remplace RIEN ci-dessus. À créer manuellement dans Firebase Console → Indexes.
+================================================================
+
+✅ REQUÊTES JS NOUVELLES / MODULES (code actuel)
+
+clients (js/clients-service.js)
+  nameKey ==                                   → upsert dédoublonnage (index auto mono-champ)
+
+client_rewards (js/clients-service.js, js/clients.js)
+  monthKey ==                                  → récompenses du mois (index auto mono-champ)
+
+sales (js/clients.js)
+  orderBy createdAt DESC                       → apport clients (filtre clientName côté client)
+  → composite futur réaliste : clientName + createdAt
+
+batch_products (batch/js/batch-service.js)
+  orderBy name ASC
+
+product_batches (batch/js/batch-service.js)
+  orderBy createdAt DESC
+  productId ==                                 → countBatchesForProduct
+
+batch_movements (batch/js/batch-service.js)
+  orderBy createdAt DESC
+  batchId ==                                   → countMovementsForBatch
+  → clientName présent en écriture (requis) ; filtre futur : clientName + createdAt
+
+product_demands (demandes/js/demand-add.js)
+  labelKey == + status ==                      → composite REQUIS (égalité double)
+
+purchases (js/suppliers.js)
+  orderBy createdAt DESC                       → page Fournisseurs (agrégat supplier côté client)
+  → composite futur : supplier + createdAt
+
+
+---
+
+📁 clients
+
+simples — auto
+nameKey ASC
+lastSaleAt DESC
+createdAt DESC
+isActive ASC
+
+composites — créer manuellement (console)
+nameKey ASC, lastSaleAt DESC
+nameKey ASC, createdAt DESC
+isActive ASC, lastSaleAt DESC
+isActive ASC, createdAt DESC
+
+
+---
+
+📁 client_rewards
+
+simples — auto
+monthKey ASC
+createdAt DESC
+clientId ASC
+clientName ASC
+status ASC
+
+composites — créer manuellement (console)
+monthKey ASC, createdAt DESC
+status ASC, createdAt DESC
+status ASC, monthKey ASC, createdAt DESC
+clientId ASC, monthKey ASC, createdAt DESC
+clientName ASC, monthKey ASC, createdAt DESC
+clientId ASC, createdAt DESC
+
+
+---
+
+📁 batch_products | product_batches | batch_movements
+
+simples — auto
+batch_products → name ASC
+product_batches → createdAt DESC
+product_batches → productId ASC
+batch_movements → createdAt DESC
+batch_movements → batchId ASC
+batch_movements → productId ASC
+batch_movements → clientName ASC
+
+composites — créer manuellement (console)
+product_batches → productId ASC, createdAt DESC
+product_batches → status ASC, createdAt DESC
+product_batches → productId ASC, status ASC, createdAt DESC
+batch_movements → batchId ASC, createdAt DESC
+batch_movements → productId ASC, createdAt DESC
+batch_movements → clientName ASC, createdAt DESC
+batch_movements → reason ASC, createdAt DESC
+batch_products → isActive ASC, name ASC
+
+
+---
+
+📁 product_demands
+
+composites — créer manuellement (console) — BLOQUANT demand-add.js
+labelKey ASC, status ASC
+
+
+---
+
+📁 sales (extension clients)
+
+composites — futur réaliste (filtre serveur par client)
+clientName ASC, createdAt DESC
+clientName ASC, status ASC, createdAt DESC
+
+
+---
+
+📁 purchases (extension suppliers)
+
+composites — futur réaliste (filtre serveur par fournisseur)
+supplier ASC, createdAt DESC
+
+
+---
+
+✅ RÉCAP CONSOLE — NOUVEAUX COMPOSITES À AJOUTER (copier / coller manuel)
+
+clients
+  nameKey ASC, lastSaleAt DESC
+  nameKey ASC, createdAt DESC
+  isActive ASC, lastSaleAt DESC
+  isActive ASC, createdAt DESC
+
+client_rewards
+  monthKey ASC, createdAt DESC
+  status ASC, createdAt DESC
+  status ASC, monthKey ASC, createdAt DESC
+  clientId ASC, monthKey ASC, createdAt DESC
+  clientName ASC, monthKey ASC, createdAt DESC
+  clientId ASC, createdAt DESC
+
+product_batches
+  productId ASC, createdAt DESC
+  status ASC, createdAt DESC
+  productId ASC, status ASC, createdAt DESC
+
+batch_movements
+  batchId ASC, createdAt DESC
+  productId ASC, createdAt DESC
+  clientName ASC, createdAt DESC
+  reason ASC, createdAt DESC
+
+batch_products
+  isActive ASC, name ASC
+
+product_demands
+  labelKey ASC, status ASC
+
+sales
+  clientName ASC, createdAt DESC
+  clientName ASC, status ASC, createdAt DESC
+
+purchases
+  supplier ASC, createdAt DESC
+
+
+---
+
+✅ firestore.indexes.json — FRAGMENT AJOUT (à merger manuellement, ne remplace pas le JSON précédent)
+
+{
+  "indexes": [
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nameKey", "order": "ASCENDING" },
+        { "fieldPath": "lastSaleAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nameKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "lastSaleAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "client_rewards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "monthKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "client_rewards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "client_rewards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "monthKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "client_rewards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "monthKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "client_rewards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientName", "order": "ASCENDING" },
+        { "fieldPath": "monthKey", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "client_rewards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "product_batches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "product_batches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "product_batches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "batch_movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "batchId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "batch_movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "batch_movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientName", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "batch_movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reason", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "batch_products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isActive", "order": "ASCENDING" },
+        { "fieldPath": "name", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "product_demands",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "labelKey", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientName", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sales",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientName", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "purchases",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "supplier", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
+
+Priorité ajout manuel Console (nouveaux) :
+  1. product_demands → labelKey ASC, status ASC     (demand-add.js — bloquant)
+  2. client_rewards → monthKey ASC, createdAt DESC
+  3. clients → nameKey ASC, createdAt DESC
+  4. batch_movements → batchId ASC, createdAt DESC
+  5. product_batches → productId ASC, createdAt DESC
+  6. sales → clientName ASC, createdAt DESC
+  7. le reste du fragment ci-dessus
+
+Règles Firestore associées (déjà dans firestore rulses.txt — à coller Console si pas déployé) :
+  match /clients/{id} { allow read, write: if signedIn(); }
+  match /client_rewards/{id} { allow read, write: if signedIn(); }
+  (+ batch_* et product_demands déjà présents)

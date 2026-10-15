@@ -1,0 +1,60 @@
+/* Critique — drawer hors flux mobile (fallback si drawer.css en cache obsolète) */
+#sfDrawerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+}
+
+#sfDrawerOverlay.open {
+  pointer-events: auto;
+}
+
+#sfDrawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  transform: translateX(-100%);
+}
+
+#sfDrawer.open {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+@media (min-width: 1024px) {
+  body.sf-app {
+    display: flex !important;
+    flex-direction: row !important;
+    margin: 0 !important;
+  }
+
+  #sfDrawerOverlay {
+    display: none !important;
+    pointer-events: none !important;
+  }
+
+  #sfDrawer {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    flex: 0 0 256px !important;
+    width: 256px !important;
+    max-width: 256px !important;
+    height: 100vh !important;
+    max-height: 100dvh !important;
+    transform: none !important;
+    visibility: visible !important;
+    box-shadow: none !important;
+    z-index: 1 !important;
+  }
+
+  #sfMain {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    min-height: 100vh;
+    position: relative !important;
+  }
+}

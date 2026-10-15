@@ -160,6 +160,38 @@ color:#B42318;
 opacity:0.75;
 }
 
+.sale-card-actions{
+display:flex;
+flex-wrap:wrap;
+gap:8px;
+margin-top:8px;
+}
+
+.btn-edit-client{
+padding:6px 10px;
+border-radius:8px;
+border:1px solid rgba(212,175,55,0.5);
+background:#1a1a1a;
+color:#D4AF37;
+font-size:12px;
+cursor:pointer;
+}
+
+.btn-cancel-sale{
+padding:6px 10px;
+border-radius:8px;
+border:1px solid rgba(180,35,24,0.45);
+background:#2a1212;
+color:#F97066;
+font-size:12px;
+cursor:pointer;
+}
+
+.btn-cancel-sale:disabled{
+opacity:0.55;
+cursor:not-allowed;
+}
+
 .result-count{
 padding:0 10px 6px;
 font-size:12px;
@@ -198,7 +230,8 @@ border-radius:8px;
 background:rgba(212,175,55,.15);
 color:#D4AF37;
 }
-</style></head><body><header id="header">
+</style><link rel="stylesheet" href="css/drawer.css">
+</head><body><header id="header">
 <h3>Produits Vendus</h3>
 <div class="status" id="status">● Online</div>
 </header><section class="filters" id="filters">
@@ -274,15 +307,7 @@ color:#D4AF37;
 </div><div class="kpi"> 
 <div class="kpi-title">Dettes</div>
 <div class="kpi-value" id="debtTotal">0</div>
-</div></section><section class="sales-list" id="salesList"></section><nav class="bottom-nav"><a href="index.html" class="nav-item" data-page="index.html">
-🛒 Vente
-</a><a href="products.html" class="nav-item" data-page="products.html">
-📦 Produits
-</a><a href="vendus.html" class="nav-item active" data-page="vendus.html">
-📋 Ventes
-</a><a href="finances.html" class="nav-item" data-page="finances.html">
-💰 Finances
-</a><a href="stats.html" class="nav-item" data-page="stats.html">
-📊 Stats
-</a></nav><script src="js/nav.js"></script><script type="module" src="js/vendus.js"></script></body>
+</div></section><section class="sales-list" id="salesList"></section><script type="module" src="js/vendus.js"></script><script src="js/drawer.js" defer></script>
+<script src="js/nav.js" defer></script>
+</body>
 </html>
