@@ -342,11 +342,12 @@ body.sf-app #sfMain .cart {
 }
 
 @media (min-width: 1024px) {
-  /* Tiroir dans le flux : ne recouvre jamais le contenu */
+  /*
+   * Desktop : tiroir fixed = intouchable au scroll page.
+   * Seul .drawer-scroll scroll (menu). #sfMain a margin-left.
+   */
   body.sf-app {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: stretch !important;
+    display: block !important;
     margin: 0 !important;
     min-height: 100vh;
     overflow-x: hidden;
@@ -359,25 +360,55 @@ body.sf-app #sfMain .cart {
   }
 
   #sfDrawer {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    inset: auto !important;
-    flex: 0 0 var(--drawer-width) !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    right: auto !important;
     width: var(--drawer-width) !important;
     max-width: var(--drawer-width) !important;
+    height: 100% !important;
     height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
+    min-height: 0 !important;
     transform: none !important;
     visibility: visible !important;
     box-shadow: none !important;
     border-right: 1px solid var(--drawer-border);
-    z-index: 1 !important;
+    background: var(--drawer-bg);
+    z-index: 100 !important;
+    overflow: hidden !important;
+    box-sizing: border-box;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
-  .drawer-scroll {
-    max-height: calc(100vh - 72px);
-    max-height: calc(100dvh - 72px);
+  #sfDrawer .drawer-dock {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--drawer-bg);
+    overflow: hidden;
+  }
+
+  #sfDrawer .drawer-brand {
+    flex: 0 0 auto;
+  }
+
+  #sfDrawer .drawer-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   #sfDrawerToggle {
@@ -386,16 +417,14 @@ body.sf-app #sfMain .cart {
 
   #sfMain {
     position: relative !important;
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
     width: auto !important;
     max-width: none !important;
-    margin-left: 0 !important;
+    margin-left: var(--drawer-width) !important;
     min-height: 100vh;
     z-index: 0;
+    box-sizing: border-box;
   }
 
-  /* Éléments fixed du main : bornés à la zone contenu (droite du tiroir) */
   body.sf-app #sfMain .cart,
   body.sf-app #sfMain .bottom-nav {
     left: var(--drawer-width) !important;

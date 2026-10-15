@@ -5,7 +5,6 @@ import {
   getDoc,
   doc,
   query,
-  where,
   orderBy,
   updateDoc,
   Timestamp,
@@ -33,7 +32,10 @@ const state = {
   rewards: [],
   currency: "$",
   period: "month",
+  nameFilter: "",
   aggregates: [],
+  filteredAggregates: [],
+  totalPeriodProfit: 0,
   selected: null,
   userId: null
 };
@@ -96,6 +98,19 @@ function saleInPeriod(sale, start, end) {
   return true;
 }
 
+function rewardSumForNameKey(nameKey) {
+  if (!nameKey) return 0;
+  return round2(
+    state.rewards
+      .filter(
+        r =>
+          (r.status || "active") === "active" &&
+          normalizeClientNameKey(r.clientName || "") === nameKey
+      )
+      .reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  );
+}
+
 async function checkUser(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) throw new Error("Utilisateur introuvable");
@@ -111,11 +126,51 @@ async function loadSales() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+function matchesNameFilter(row, nameTerm) {
+  if (!nameTerm) return true;
+  const key = row.nameKey || normalizeClientNameKey(row.name || "");
+  const name = normalizeClientNameKey(row.name || "");
+  return key.includes(nameTerm) || name.includes(nameTerm);
+}
+
+function openDetailPopup(focusSales = false) {
+  document.body.classList.add("client-detail-popup-open");
+  const backdrop = $("clientDetailBackdrop");
+  if (backdrop) backdrop.setAttribute("aria-hidden", "false");
+
+  const section = $("clientDetailSection");
+  section?.setAttribute("role", "dialog");
+  section?.setAttribute("aria-modal", "true");
+
+  requestAnimationFrame(() => {
+    if (focusSales) {
+      $("clientSalesList")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else {
+      $("detailClientName")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      $("rewardPercent")?.focus({ preventScroll: true });
+    }
+  });
+}
+
+function closeDetailPopup() {
+  document.body.classList.remove("client-detail-popup-open");
+  const backdrop = $("clientDetailBackdrop");
+  if (backdrop) backdrop.setAttribute("aria-hidden", "true");
+  const section = $("clientDetailSection");
+  section?.removeAttribute("role");
+  section?.removeAttribute("aria-modal");
+}
+
 function buildAggregates() {
   const { start, end, label } = getPeriodBounds(state.period);
+  const nameTerm = normalizeClientNameKey(state.nameFilter || "");
+
   const hint = $("filterHint");
   if (hint) {
-    hint.textContent = `Filtre : ${label} — clients récurrents mis en avant.`;
+    const namePart = state.nameFilter
+      ? ` · nom « ${state.nameFilter} »`
+      : "";
+    hint.textContent = `Filtre : ${label}${namePart} — clients récurrents mis en avant.`;
   }
 
   const periodSales = state.sales.filter(
@@ -134,6 +189,7 @@ function buildAggregates() {
         nameKey,
         name,
         clientId: null,
+        phone: "",
         salesCount: 0,
         ca: 0,
         profit: 0,
@@ -178,25 +234,53 @@ function buildAggregates() {
     }
   });
 
+  const totalSalesCount = periodSales.filter(s =>
+    normalizeClientNameKey(sanitizeClientName(s.clientName || ""))
+  ).length;
+
   state.aggregates = [...byKey.values()]
-    .map(row => ({
-      ...row,
-      isRecurring: row.salesCount >= 2
-    }))
+    .map(row => {
+      const salesSharePct =
+        totalSalesCount > 0
+          ? round2((100 * row.salesCount) / totalSalesCount)
+          : 0;
+      return {
+        ...row,
+        isRecurring: row.salesCount >= 2,
+        salesSharePct,
+        rewardMonth: rewardSumForNameKey(row.nameKey)
+      };
+    })
     .sort((a, b) => {
       if (a.isRecurring !== b.isRecurring) return a.isRecurring ? -1 : 1;
       return b.ca - a.ca;
     });
 
-  const recurring = state.aggregates.filter(a => a.isRecurring).length;
-  const periodCa = state.aggregates.reduce((s, a) => s + a.ca, 0);
+  state.filteredAggregates = state.aggregates.filter(a =>
+    matchesNameFilter(a, nameTerm)
+  );
+
+  const view = state.filteredAggregates;
+  const recurring = view.filter(a => a.isRecurring).length;
+  const periodCa = view.reduce((s, a) => s + a.ca, 0);
+  state.totalPeriodProfit = round2(view.reduce((s, a) => s + a.profit, 0));
   const rewardsTotal = state.rewards
-    .filter(r => (r.status || "active") === "active")
+    .filter(r => {
+      if ((r.status || "active") !== "active") return false;
+      if (!nameTerm) return true;
+      return matchesNameFilter(
+        {
+          name: r.clientName || "",
+          nameKey: normalizeClientNameKey(r.clientName || "")
+        },
+        nameTerm
+      );
+    })
     .reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
   if ($("kpiClientsCount")) {
     $("kpiClientsCount").textContent = String(
-      state.aggregates.filter(a => a.salesCount > 0 || a.clientId).length
+      view.filter(a => a.salesCount > 0 || a.clientId).length
     );
   }
   if ($("kpiRecurringCount")) {
@@ -207,9 +291,129 @@ function buildAggregates() {
     $("kpiRewardsTotal").textContent = formatMoney(rewardsTotal);
   }
 
+  if (state.selected?.nameKey) {
+    const refreshed = view.find(a => a.nameKey === state.selected.nameKey);
+    if (refreshed) state.selected = refreshed;
+  }
+
+  renderTopClients();
   renderClientsList();
   renderRecommendations();
   fillCatchupSales(periodSales);
+
+  if (state.selected) {
+    paintDetailSummary(state.selected);
+  }
+}
+
+function fillTopList(containerId, rows, valueFn) {
+  const box = $(containerId);
+  if (!box) return;
+  box.replaceChildren();
+
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "Aucune donnée.";
+    box.appendChild(empty);
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  rows.forEach((row, index) => {
+    const line = document.createElement("div");
+    line.className = "top-row";
+    line.id = `${containerId}_row_${index}`;
+
+    const left = document.createElement("span");
+    left.textContent = `${index + 1}. ${row.name}`;
+
+    const right = document.createElement("span");
+    right.textContent = valueFn(row);
+
+    line.append(left, right);
+    frag.appendChild(line);
+  });
+  box.appendChild(frag);
+}
+
+function renderTopClients() {
+  const withSales = state.filteredAggregates.filter(a => a.salesCount > 0);
+
+  const byShare = [...withSales]
+    .sort((a, b) => b.salesSharePct - a.salesSharePct || b.ca - a.ca)
+    .slice(0, 5);
+
+  const byProfit = [...withSales]
+    .sort((a, b) => b.profit - a.profit || b.ca - a.ca)
+    .slice(0, 5);
+
+  fillTopList(
+    "topBySalesShare",
+    byShare,
+    row => `${row.salesSharePct}% · ${row.salesCount} v.`
+  );
+  fillTopList(
+    "topByProfit",
+    byProfit,
+    row => formatMoney(row.profit)
+  );
+}
+
+function getClientProfitSharePct(row) {
+  const total = state.totalPeriodProfit;
+  if (!(total > 0)) return 0;
+  return round2((100 * (Number(row.profit) || 0)) / total);
+}
+
+function paintDetailSummary(row) {
+  const profitSharePct = getClientProfitSharePct(row);
+
+  const nameEl = $("detailClientName");
+  if (nameEl) {
+    nameEl.textContent = row.name || "Client";
+    nameEl.classList.remove("is-empty");
+  }
+
+  const summary = $("detailSummary");
+  if (summary) {
+    summary.textContent = `CA période ${formatMoney(row.ca)} — ${row.salesCount} vente(s) — part ventes ${row.salesSharePct ?? 0}%${row.isRecurring ? " — RÉCURRENT" : ""}`;
+  }
+
+  const profitEl = $("detailProfit");
+  if (profitEl) {
+    profitEl.textContent = `Bénéfice période : ${formatMoney(row.profit)}`;
+  }
+
+  const shareEl = $("detailProfitShare");
+  if (shareEl) {
+    shareEl.textContent = `Part du bénéfice total : ${profitSharePct}% (sur ${formatMoney(state.totalPeriodProfit)})`;
+  }
+
+  const rewardEl = $("detailRewardMonth");
+  if (rewardEl) {
+    rewardEl.textContent = `Récompense mois : ${formatMoney(row.rewardMonth || 0)}`;
+  }
+}
+
+function clearDetailSummary() {
+  const nameEl = $("detailClientName");
+  if (nameEl) {
+    nameEl.textContent = "Aucun client sélectionné";
+    nameEl.classList.add("is-empty");
+  }
+  if ($("detailSummary")) {
+    $("detailSummary").textContent = "Choisissez un client dans la liste ci-dessous.";
+  }
+  if ($("detailProfit")) {
+    $("detailProfit").textContent = "Bénéfice période : —";
+  }
+  if ($("detailProfitShare")) {
+    $("detailProfitShare").textContent = "Part du bénéfice total : —";
+  }
+  if ($("detailRewardMonth")) {
+    $("detailRewardMonth").textContent = "Récompense mois : —";
+  }
 }
 
 function renderClientsList() {
@@ -217,11 +421,13 @@ function renderClientsList() {
   if (!box) return;
   box.replaceChildren();
 
-  const withSales = state.aggregates.filter(a => a.salesCount > 0);
+  const withSales = state.filteredAggregates.filter(a => a.salesCount > 0);
   if (!withSales.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "Aucun client avec ventes sur cette période.";
+    empty.textContent = state.nameFilter
+      ? "Aucun client ne correspond à ce nom sur la période."
+      : "Aucun client avec ventes sur cette période.";
     box.appendChild(empty);
     return;
   }
@@ -252,7 +458,10 @@ function renderClientsList() {
     meta.textContent = [
       `CA : ${formatMoney(row.ca)}`,
       `${row.salesCount} vente(s)`,
+      `Part : ${row.salesSharePct ?? 0}%`,
       `Bénéfice : ${formatMoney(row.profit)}`,
+      `Part bénéfice : ${getClientProfitSharePct(row)}%`,
+      `Récompense : ${formatMoney(row.rewardMonth || 0)}`,
       row.lastSaleAt
         ? `Dernier : ${row.lastSaleAt.toLocaleDateString("fr-FR")}`
         : ""
@@ -260,48 +469,144 @@ function renderClientsList() {
       .filter(Boolean)
       .join(" • ");
 
-    card.append(top, meta);
-    card.addEventListener("click", () => selectClient(row));
+    const actions = document.createElement("div");
+    actions.className = "client-card-actions";
+
+    const btnReward = document.createElement("button");
+    btnReward.type = "button";
+    btnReward.className = "secondary";
+    btnReward.id = `btnReward_${row.nameKey}`;
+    btnReward.textContent = "Récompense";
+    btnReward.addEventListener("click", event => {
+      event.stopPropagation();
+      selectClient(row, { focusSales: false, openPopup: true });
+    });
+
+    const btnSales = document.createElement("button");
+    btnSales.type = "button";
+    btnSales.className = "secondary";
+    btnSales.id = `btnSales_${row.nameKey}`;
+    btnSales.textContent = "Ventes";
+    btnSales.addEventListener("click", event => {
+      event.stopPropagation();
+      selectClient(row, { focusSales: true, openPopup: true });
+    });
+
+    const btnEdit = document.createElement("button");
+    btnEdit.type = "button";
+    btnEdit.id = `btnEdit_${row.nameKey}`;
+    btnEdit.textContent = "Modifier";
+    bindActionButton(btnEdit, async event => {
+      event.stopPropagation();
+      await editClientProfile(row);
+    });
+
+    actions.append(btnReward, btnSales, btnEdit);
+
+    card.append(top, meta, actions);
+    card.addEventListener("click", () => {
+      selectClient(row, { openPopup: true });
+    });
     frag.appendChild(card);
   });
 
   box.appendChild(frag);
 }
 
-function selectClient(row) {
+function selectClient(row, options = {}) {
+  const { focusSales = false, openPopup = false } = options;
   state.selected = row;
   renderClientsList();
-
-  const summary = $("detailSummary");
-  if (summary) {
-    summary.textContent = `${row.name} — CA période ${formatMoney(row.ca)} — ${row.salesCount} vente(s)${row.isRecurring ? " — RÉCURRENT" : ""}`;
-  }
+  paintDetailSummary(row);
 
   const pct = Number($("rewardPercent")?.value) || 0;
   if ($("rewardAmount")) {
-    $("rewardAmount").value = String(round2((row.ca * pct) / 100));
+    $("rewardAmount").value = String(round2(((Number(row.profit) || 0) * pct) / 100));
   }
 
   const list = $("clientSalesList");
-  if (!list) return;
-  list.replaceChildren();
+  if (list) {
+    list.replaceChildren();
 
-  const sales = state.sales.filter(s => row.saleIds.includes(s.id));
-  if (!sales.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.textContent = "Aucune vente liée.";
-    list.appendChild(empty);
+    const sales = state.sales.filter(s => row.saleIds.includes(s.id));
+    if (!sales.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "Aucune vente liée.";
+      list.appendChild(empty);
+    } else {
+      sales.forEach(sale => {
+        const line = document.createElement("div");
+        line.className = "meta";
+        const d = getDate(sale.createdAt);
+        line.textContent = `${d ? d.toLocaleString("fr-FR") : "—"} — ${formatMoney(sale.total_amount || 0)} — bénéfice ${formatMoney(sale.total_profit || 0)} — ${sale.payment_status || "paid"}`;
+        list.appendChild(line);
+      });
+    }
+  }
+
+  if (openPopup) {
+    openDetailPopup(focusSales);
+  }
+}
+
+async function editClientProfile(row) {
+  const nextName = window.prompt("Nom du client :", row.name || "");
+  if (nextName == null) return;
+
+  const name = sanitizeClientName(nextName);
+  if (!name) {
+    alert("Nom client invalide.");
     return;
   }
 
-  sales.forEach(sale => {
-    const line = document.createElement("div");
-    line.className = "meta";
-    const d = getDate(sale.createdAt);
-    line.textContent = `${d ? d.toLocaleString("fr-FR") : "—"} — ${formatMoney(sale.total_amount || 0)} — ${sale.payment_status || "paid"}`;
-    list.appendChild(line);
-  });
+  const nextPhone = window.prompt(
+    "Téléphone (optionnel) :",
+    row.phone || ""
+  );
+  if (nextPhone == null) return;
+  const phone = String(nextPhone).trim().slice(0, 40);
+
+  try {
+    const upserted = await upsertClientByName(name, state.userId, {
+      phone,
+      lastSaleAt: row.lastSaleAt
+        ? Timestamp.fromDate(row.lastSaleAt)
+        : Timestamp.now()
+    });
+
+    if (row.clientId && upserted?.clientId && row.clientId !== upserted.clientId) {
+      // nom changé vers une autre clé : OK, upsert gère
+    }
+
+    if (row.name !== name && row.saleIds?.length) {
+      await Promise.all(
+        row.saleIds.map(saleId =>
+          updateDoc(doc(db, "sales", saleId), {
+            clientName: name,
+            updatedAt: Timestamp.now()
+          })
+        )
+      );
+    }
+
+    await writeLog({
+      userId: state.userId,
+      action: "client_profile_update",
+      targetId: upserted?.clientId || row.clientId || "",
+      details: {
+        previous: row.name,
+        clientName: name,
+        phone
+      }
+    });
+
+    await refreshAll();
+    setStatus("Client mis à jour.");
+  } catch (err) {
+    console.error(err);
+    alert(err?.message || "Impossible de modifier le client.");
+  }
 }
 
 function fillCatchupSales(periodSales) {
@@ -345,7 +650,7 @@ function renderRecommendations() {
   box.replaceChildren();
 
   const recos = [];
-  const withSales = state.aggregates.filter(a => a.salesCount > 0);
+  const withSales = state.filteredAggregates.filter(a => a.salesCount > 0);
   const recurring = withSales.filter(a => a.isRecurring);
   const rewardedKeys = new Set(
     state.rewards
@@ -446,7 +751,7 @@ function calcRewardLocal() {
   const pct = Number($("rewardPercent")?.value) || 0;
   if ($("rewardAmount")) {
     $("rewardAmount").value = String(
-      round2((state.selected.ca * pct) / 100)
+      round2(((Number(state.selected.profit) || 0) * pct) / 100)
     );
   }
 }
@@ -500,16 +805,40 @@ async function refreshAll() {
   setStatus("Prêt.");
 }
 
+function applyClientFilters() {
+  state.period = $("periodFilter")?.value || "month";
+  state.nameFilter = sanitizeClientName($("clientNameFilter")?.value || "");
+  buildAggregates();
+}
+
 function bindEvents() {
   bindActionButton($("applyFilterBtn"), async () => {
-    state.period = $("periodFilter")?.value || "month";
-    buildAggregates();
+    applyClientFilters();
+  });
+
+  $("clientNameFilter")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyClientFilters();
+    }
   });
 
   $("catchupSale")?.addEventListener("change", updateCatchupAmount);
   bindActionButton($("catchupSaveBtn"), handleCatchup);
   bindActionButton($("calcRewardBtn"), async () => calcRewardLocal());
   bindActionButton($("saveRewardBtn"), handleSaveReward);
+
+  $("clientDetailModalClose")?.addEventListener("click", () => {
+    closeDetailPopup();
+  });
+  $("clientDetailBackdrop")?.addEventListener("click", () => {
+    closeDetailPopup();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      closeDetailPopup();
+    }
+  });
 }
 
 onAuthStateChanged(auth, async user => {
@@ -526,6 +855,7 @@ onAuthStateChanged(auth, async user => {
       String(config?.currencySymbol || "").trim() ||
       String(config?.currency || "").trim() ||
       "$";
+    clearDetailSummary();
     bindEvents();
     await refreshAll();
   } catch (err) {

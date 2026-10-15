@@ -248,19 +248,27 @@ Object.assign(grid.style, {
 });
 
 const keys = [
-  "7", "8", "9", "÷",
-  "4", "5", "6", "×",
-  "1", "2", "3", "-",
-  "0", ".", "=", "+",
-  "C"
+  "C", "⌫", "%", "÷",
+  "7", "8", "9", "×",
+  "4", "5", "6", "−",
+  "1", "2", "3", "+",
+  "±", "0", ".", "="
 ];
 
+const OPERATOR_KEYS = new Set(["÷", "×", "−", "+", "="]);
+const UTIL_KEYS = new Set(["C", "⌫", "%", "±"]);
+
 let expression = "";
+
+function syncDisplay() {
+  display.value = expression;
+}
 
 function safeCalculate(expr) {
   const sanitized = expr
     .replace(/×/g, "*")
     .replace(/÷/g, "/")
+    .replace(/−/g, "-")
     .trim();
 
   if (!sanitized || !/^[0-9+\-*/.() ]+$/.test(sanitized)) {
@@ -272,6 +280,65 @@ function safeCalculate(expr) {
   } catch {
     return "Erreur";
   }
+}
+
+function applyPercentToExpression() {
+  const match = expression.match(/(\d+\.?\d*)$/);
+  if (!match) return;
+  const num = Number(match[1]);
+  if (!Number.isFinite(num)) return;
+  const replaced = String(Math.round((num / 100) * 10000) / 10000);
+  expression = expression.slice(0, -match[1].length) + replaced;
+}
+
+function toggleSignOnExpression() {
+  if (!expression || expression === "-" || expression === "−") {
+    expression = expression ? "" : "-";
+    return;
+  }
+
+  const simple = expression.match(/^(.*?)([-−]?)(\d+\.?\d*)$/);
+  if (!simple) return;
+
+  const prefix = simple[1];
+  const sign = simple[2];
+  const num = simple[3];
+  const before = prefix.slice(-1);
+  const afterOperator =
+    !prefix || ["+", "-", "−", "×", "÷", "*", "/", "("].includes(before);
+
+  if (!afterOperator) {
+    // Ex. 12+34 → 12+(-34) non supporté sans paren ; on préfixe juste -
+    expression = prefix + "-" + num;
+    return;
+  }
+
+  if (sign === "-" || sign === "−") {
+    expression = prefix + num;
+  } else {
+    expression = prefix + "-" + num;
+  }
+}
+
+function handleCalcKey(key) {
+  if (key === "C") {
+    expression = "";
+  } else if (key === "⌫") {
+    expression = expression.slice(0, -1);
+  } else if (key === "%") {
+    applyPercentToExpression();
+  } else if (key === "±") {
+    toggleSignOnExpression();
+  } else if (key === "=") {
+    expression = formatCalcResult(safeCalculate(expression));
+    applyCalcResult(expression);
+  } else if (key === "−") {
+    expression += "-";
+  } else {
+    expression += key;
+  }
+
+  syncDisplay();
 }
 
 function evaluateExpression(source) {
@@ -388,27 +455,35 @@ keys.forEach(key => {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = key;
+  btn.dataset.calcKey = key;
+
+  let background = "#eee";
+  let color = "#111";
+
+  if (OPERATOR_KEYS.has(key)) {
+    background = "#0B3D2E";
+    color = "#fff";
+  } else if (key === "C") {
+    background = "#FDE8E8";
+    color = "#B42318";
+  } else if (key === "⌫" || key === "%" || key === "±") {
+    background = "#E8F0EE";
+    color = "#0B3D2E";
+  }
 
   Object.assign(btn.style, {
     padding: "12px",
     border: "none",
     borderRadius: "10px",
-    background: "#eee",
+    background,
+    color,
     cursor: "pointer",
-    fontSize: "15px"
+    fontSize: "15px",
+    fontWeight: OPERATOR_KEYS.has(key) || UTIL_KEYS.has(key) ? "600" : "500"
   });
 
   btn.addEventListener("click", () => {
-    if (key === "C") {
-      expression = "";
-    } else if (key === "=") {
-      expression = formatCalcResult(safeCalculate(expression));
-      applyCalcResult(expression);
-    } else {
-      expression += key;
-    }
-
-    display.value = expression;
+    handleCalcKey(key);
   });
 
   grid.appendChild(btn);
@@ -521,6 +596,72 @@ document.addEventListener("pointerdown", event => {
   if (clickedBox || clickedBtn) return;
 
   closeCalc();
+});
+
+document.addEventListener("keydown", event => {
+  if (!calcOpened) return;
+  if (rateView.style.display === "block") return;
+
+  const { key } = event;
+
+  if (key === "Escape") {
+    event.preventDefault();
+    closeCalc();
+    return;
+  }
+
+  if (key === "Backspace") {
+    event.preventDefault();
+    handleCalcKey("⌫");
+    return;
+  }
+
+  if (key === "Enter" || key === "=") {
+    event.preventDefault();
+    handleCalcKey("=");
+    return;
+  }
+
+  if (key === "*") {
+    event.preventDefault();
+    handleCalcKey("×");
+    return;
+  }
+
+  if (key === "/") {
+    event.preventDefault();
+    handleCalcKey("÷");
+    return;
+  }
+
+  if (key === "-") {
+    event.preventDefault();
+    handleCalcKey("−");
+    return;
+  }
+
+  if (key === "+") {
+    event.preventDefault();
+    handleCalcKey("+");
+    return;
+  }
+
+  if (key === "." || key === ",") {
+    event.preventDefault();
+    handleCalcKey(".");
+    return;
+  }
+
+  if (key === "%") {
+    event.preventDefault();
+    handleCalcKey("%");
+    return;
+  }
+
+  if (/^[0-9]$/.test(key)) {
+    event.preventDefault();
+    handleCalcKey(key);
+  }
 });
 
 }

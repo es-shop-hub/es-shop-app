@@ -45,9 +45,116 @@ button.secondary{background:#222;color:#D4AF37;border:1px solid rgba(212,175,55,
 .badge{font-size:10px;padding:3px 7px;border-radius:999px;background:rgba(212,175,55,0.15);color:#D4AF37}
 .badge.recurring{background:rgba(22,163,74,0.2);color:#4ade80}
 .meta{font-size:12px;color:#aaa;line-height:1.5}
+.detail-profit{font-size:13px;color:#4ade80;font-weight:700;margin:4px 0 8px}
+.detail-client-name{
+  font-size:18px;
+  font-weight:700;
+  color:#ffd700;
+  margin:0 0 8px;
+  word-break:break-word;
+}
+.detail-client-name.is-empty{color:#777;font-size:14px;font-weight:500}
+#clientDetailModalClose{
+  display:none;
+  position:absolute;
+  top:10px;
+  right:10px;
+  width:34px;
+  height:34px;
+  padding:0;
+  border-radius:50%;
+  background:#222;
+  color:#D4AF37;
+  border:1px solid rgba(212,175,55,0.45);
+  font-size:18px;
+  line-height:1;
+  z-index:2;
+}
+body.client-detail-popup-open{overflow:hidden}
+body.client-detail-popup-open #clientDetailBackdrop{
+  display:block;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.72);
+  z-index:13000;
+}
+body.client-detail-popup-open #clientDetailSection{
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:min(520px,calc(100vw - 24px));
+  max-height:min(85vh,720px);
+  overflow:auto;
+  z-index:13001;
+  margin:0;
+  background:#0f0f0f;
+  border:1px solid rgba(212,175,55,0.35);
+  border-radius:16px;
+  padding:16px 14px 14px;
+  box-shadow:0 16px 40px rgba(0,0,0,0.55);
+}
+body.client-detail-popup-open #clientDetailModalClose{display:flex;align-items:center;justify-content:center}
+#clientDetailBackdrop{display:none}
 .reco{padding:10px 12px;border-left:3px solid #D4AF37;background:#121212;border-radius:0 10px 10px 0;font-size:13px;color:#ddd;margin-bottom:8px}
 .empty{color:#777;font-size:13px;padding:12px}
 .row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.client-card-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.client-card-actions button{padding:6px 10px;font-size:11px}
+.clients-dual{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  align-items:start;
+  margin-bottom:18px;
+}
+.clients-dual > .section{margin-bottom:0;min-width:0}
+.top-dual{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.top-card{
+  background:#151515;
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px;
+  padding:12px;
+}
+.top-card h3{font-size:13px;color:#D4AF37;margin-bottom:8px}
+.top-row{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  font-size:12px;
+  color:#ddd;
+  padding:6px 0;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+}
+.top-row:last-child{border-bottom:none}
+#calcBtn{
+  position:fixed;
+  right:14px;
+  top:clamp(120px,15vh,280px);
+  width:30px;
+  height:30px;
+  border:none;
+  border-radius:50%;
+  background:#0B3D2E;
+  color:#fff;
+  font-size:16px;
+  cursor:pointer;
+  z-index:12000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 4px 10px rgba(0,0,0,.18);
+  transition:transform .2s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+#calcBtn:active{transform:scale(.95)}
+@media (max-width:340px){
+  .clients-dual,.top-dual{grid-template-columns:1fr}
+}
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-top:1px solid rgba(255,255,255,0.08);padding:8px;gap:4px;z-index:20}
 .nav-item{flex:1;text-align:center;text-decoration:none;color:#aaa;font-size:11px;padding:8px 4px}
 .nav-item.active{color:#D4AF37}
@@ -70,6 +177,10 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
       <option value="7d">7 jours</option>
       <option value="all">Tout</option>
     </select>
+  </div>
+  <div class="field">
+    <label for="clientNameFilter">Nom client</label>
+    <input id="clientNameFilter" type="search" maxlength="80" placeholder="Rechercher un client…" autocomplete="off">
   </div>
   <button type="button" id="applyFilterBtn">Appliquer</button>
 </div>
@@ -95,29 +206,81 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
   </div>
 </div>
 
-<section class="section" id="catchupSection">
+<div class="clients-dual" id="clientsDualPanels">
+  <section class="section" id="catchupSection">
+    <div class="section-title">
+      <h2>Rattrapage — client oublié à la vente</h2>
+      <p>Lie un nom à une vente existante. Le montant vient de la vente (pas de faux CA).</p>
+    </div>
+    <div class="panel" id="catchupPanel">
+      <div class="field">
+        <label for="catchupName">Nom client</label>
+        <input id="catchupName" type="text" maxlength="80" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="catchupPhone">Téléphone (optionnel)</label>
+        <input id="catchupPhone" type="text" maxlength="40" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="catchupSale">Vente existante</label>
+        <select id="catchupSale"></select>
+      </div>
+      <div class="field">
+        <label>Montant vente</label>
+        <input id="catchupAmount" type="text" readonly value="—">
+      </div>
+      <button type="button" id="catchupSaveBtn">Enregistrer client sur la vente</button>
+    </div>
+  </section>
+
+  <div id="clientDetailBackdrop" aria-hidden="true"></div>
+  <section class="section" id="clientDetailSection" aria-labelledby="detailClientName">
+    <button type="button" id="clientDetailModalClose" aria-label="Fermer">×</button>
+    <div class="section-title">
+      <h2>Détail / récompense</h2>
+      <p>Cliquez un client dans la liste (ou Récompense / Ventes). Le détail s’ouvre ici.</p>
+    </div>
+    <div class="panel" id="rewardPanel">
+      <p class="detail-client-name is-empty" id="detailClientName">Aucun client sélectionné</p>
+      <p class="meta" id="detailSummary">Choisissez un client dans la liste ci-dessous.</p>
+      <p class="detail-profit" id="detailProfit">Bénéfice période : —</p>
+      <p class="meta" id="detailProfitShare">Part du bénéfice total : —</p>
+      <p class="meta" id="detailRewardMonth">Récompense mois : —</p>
+      <div class="field">
+        <label for="rewardPercent">% du bénéfice client</label>
+        <input id="rewardPercent" type="number" min="0" max="100" step="0.1" value="5">
+      </div>
+      <div class="field">
+        <label for="rewardAmount">Montant récompense</label>
+        <input id="rewardAmount" type="number" min="0" step="0.01" value="0">
+      </div>
+      <div class="field">
+        <label for="rewardNote">Note</label>
+        <input id="rewardNote" type="text" maxlength="200" autocomplete="off">
+      </div>
+      <div class="row-actions">
+        <button type="button" id="calcRewardBtn" class="secondary">Calculer</button>
+        <button type="button" id="saveRewardBtn">Enregistrer récompense</button>
+      </div>
+      <div class="list" id="clientSalesList"></div>
+    </div>
+  </section>
+</div>
+
+<section class="section" id="topClientsSection">
   <div class="section-title">
-    <h2>Rattrapage — client oublié à la vente</h2>
-    <p>Lie un nom à une vente existante. Le montant vient de la vente (pas de faux CA).</p>
+    <h2>Top 5 clients</h2>
+    <p>Part des ventes et bénéfice sur le filtre actif — calcul local.</p>
   </div>
-  <div class="panel" id="catchupPanel">
-    <div class="field">
-      <label for="catchupName">Nom client</label>
-      <input id="catchupName" type="text" maxlength="80" autocomplete="off">
+  <div class="top-dual" id="topClientsDual">
+    <div class="top-card" id="topBySalesCard">
+      <h3>Top 5 — part des ventes</h3>
+      <div class="list" id="topBySalesShare"></div>
     </div>
-    <div class="field">
-      <label for="catchupPhone">Téléphone (optionnel)</label>
-      <input id="catchupPhone" type="text" maxlength="40" autocomplete="off">
+    <div class="top-card" id="topByProfitCard">
+      <h3>Top 5 — bénéfice</h3>
+      <div class="list" id="topByProfit"></div>
     </div>
-    <div class="field">
-      <label for="catchupSale">Vente existante</label>
-      <select id="catchupSale"></select>
-    </div>
-    <div class="field">
-      <label>Montant vente</label>
-      <input id="catchupAmount" type="text" readonly value="—">
-    </div>
-    <button type="button" id="catchupSaveBtn">Enregistrer client sur la vente</button>
   </div>
 </section>
 
@@ -129,33 +292,6 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
   <div class="list" id="clientsList"></div>
 </section>
 
-<section class="section" id="clientDetailSection">
-  <div class="section-title">
-    <h2>Détail / récompense</h2>
-    <p>Sélectionnez un client. Calcul récompense en local, puis enregistrement DB.</p>
-  </div>
-  <div class="panel" id="rewardPanel">
-    <p class="meta" id="detailSummary">Aucun client sélectionné.</p>
-    <div class="field">
-      <label for="rewardPercent">% du CA client</label>
-      <input id="rewardPercent" type="number" min="0" max="100" step="0.1" value="5">
-    </div>
-    <div class="field">
-      <label for="rewardAmount">Montant récompense</label>
-      <input id="rewardAmount" type="number" min="0" step="0.01" value="0">
-    </div>
-    <div class="field">
-      <label for="rewardNote">Note</label>
-      <input id="rewardNote" type="text" maxlength="200" autocomplete="off">
-    </div>
-    <div class="row-actions">
-      <button type="button" id="calcRewardBtn" class="secondary">Calculer</button>
-      <button type="button" id="saveRewardBtn">Enregistrer récompense</button>
-    </div>
-    <div class="list" id="clientSalesList"></div>
-  </div>
-</section>
-
 <section class="section" id="recoSection">
   <div class="section-title">
     <h2>Recommandations</h2>
@@ -164,7 +300,10 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
   <div class="list" id="recoList"></div>
 </section>
 
+<button type="button" id="calcBtn" data-calc-target="rewardAmount" aria-label="Calculatrice">➕</button>
+
 <script type="module" src="js/clients.js"></script>
+<script type="module" src="js/calcule.js"></script>
 <script src="js/drawer.js" defer></script>
 <script src="js/nav.js" defer></script>
 </body>

@@ -170,6 +170,14 @@ function bindDrawerEvents(toggle, overlay, drawer) {
   }
 }
 
+function clearDrawerInlineHeight(drawer) {
+  if (!drawer) {
+    return;
+  }
+  drawer.style.removeProperty("min-height");
+  drawer.style.removeProperty("height");
+}
+
 function initDrawerChrome() {
   const shell = getDrawerShell();
   const { drawer, toggle, overlay } = shell;
@@ -187,9 +195,17 @@ function initDrawerChrome() {
   }
 
   drawerChromeRetries = 0;
+  clearDrawerInlineHeight(drawer);
   refreshPublicDrawerLinks();
   bindDrawerEvents(toggle, overlay, drawer);
   applyResponsiveLayout(drawer, overlay);
+
+  if (!drawer.dataset.sfFixedBound) {
+    drawer.dataset.sfFixedBound = "1";
+    DESKTOP_MQ.addEventListener("change", () => {
+      clearDrawerInlineHeight(getDrawerShell().drawer);
+    });
+  }
 }
 
 function initDrawerNavigation() {

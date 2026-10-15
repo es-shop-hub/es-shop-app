@@ -243,6 +243,27 @@ function createDrawerPublicItem(item) {
   return link;
 }
 
+function ensureDrawerDock(drawer) {
+  if (!drawer) {
+    return null;
+  }
+  let dock = drawer.querySelector(":scope > .drawer-dock");
+  if (dock) {
+    return dock;
+  }
+  const brand = drawer.querySelector(".drawer-brand");
+  const scroll = drawer.querySelector(".drawer-scroll");
+  dock = createDrawerNode("div", "drawer-dock");
+  if (brand) {
+    dock.appendChild(brand);
+  }
+  if (scroll) {
+    dock.appendChild(scroll);
+  }
+  drawer.replaceChildren(dock);
+  return dock;
+}
+
 function ensureDrawerDomShell() {
   const shell = getDrawerShell();
   const drawer = shell.drawer;
@@ -251,15 +272,18 @@ function ensureDrawerDomShell() {
   }
 
   let brand = shell.brand;
-  const scroll = drawer.querySelector(".drawer-scroll");
+  let scroll = drawer.querySelector(".drawer-scroll");
   let nav = shell.nav;
   let adminNav = shell.adminNav;
 
   if (brand && scroll && nav && adminNav) {
+    ensureDrawerDock(drawer);
     return { brand, nav };
   }
 
   drawer.replaceChildren();
+
+  const dock = createDrawerNode("div", "drawer-dock");
 
   brand = createDrawerNode("div", "drawer-brand");
   brand.id = "sfDrawerBrand";
@@ -274,7 +298,8 @@ function ensureDrawerDomShell() {
   adminNav.setAttribute("aria-label", "Administration");
 
   scrollEl.append(nav, adminNav);
-  drawer.append(brand, scrollEl);
+  dock.append(brand, scrollEl);
+  drawer.appendChild(dock);
 
   return { brand, nav };
 }
@@ -413,6 +438,7 @@ function ensureAppShell() {
   if (hasPrebuiltDrawerShell()) {
     markAppShellReady();
     ensureOverlayForShell(shell);
+    ensureDrawerDock(shell.drawer);
     ensurePageHeader(shell.main);
     renderDrawerPublicShell();
     bindDrawerToggleImmediate();
@@ -432,6 +458,9 @@ function ensureAppShell() {
     drawer.id = "sfDrawer";
     drawer.setAttribute("aria-hidden", "true");
 
+    const dock = document.createElement("div");
+    dock.className = "drawer-dock";
+
     const brand = document.createElement("div");
     brand.id = "sfDrawerBrand";
     brand.className = "drawer-brand";
@@ -450,8 +479,11 @@ function ensureAppShell() {
     adminNav.setAttribute("aria-label", "Administration");
 
     scroll.append(nav, adminNav);
-    drawer.append(brand, scroll);
+    dock.append(brand, scroll);
+    drawer.appendChild(dock);
     document.body.appendChild(drawer);
+  } else {
+    ensureDrawerDock(drawer);
   }
 
   let main = getDrawerShell().main;
