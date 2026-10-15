@@ -27,7 +27,6 @@ export const state = {
   saleItems: [],
   purchases: [],
   purchaseItems: [],
-  recentPurchases: [],
   sales: [],
   expenses: [],
   debts: [],
@@ -36,7 +35,6 @@ export const state = {
   products: [],
   users: [],
   stockMovements: [],
-  recentStockMovements: [],
   batchBatches: [],
   batchMovements: [],
   batchStats: null,
@@ -213,24 +211,6 @@ function buildCollectionQuery(collectionName) {
   return query(collection(db, collectionName), ...constraints);
 }
 
-function buildRecentListQuery(collectionName) {
-  const { start, end } = buildDateRange();
-  const constraints = [];
-
-  if (start) {
-    constraints.push(where("createdAt", ">=", start));
-  }
-
-  if (end) {
-    constraints.push(where("createdAt", "<=", end));
-  }
-
-  constraints.push(orderBy("createdAt", "desc"));
-  constraints.push(limit(STATS_LIST_LIMIT));
-
-  return query(collection(db, collectionName), ...constraints);
-}
-
 function buildOpenDebtsQuery(listOnly = false) {
   const constraints = [
     where("amount_remaining", ">", 0),
@@ -267,9 +247,7 @@ async function loadData() {
     const expensesQuery = buildCollectionQuery("expenses");
     const lossesQuery = buildCollectionQuery("losses");
     const purchasesQuery = buildCollectionQuery("purchases");
-    const recentPurchasesQuery = buildRecentListQuery("purchases");
     const stockQuery = buildCollectionQuery("stock_movements");
-    const recentStockQuery = buildRecentListQuery("stock_movements");
     const openDebtsQuery = buildOpenDebtsQuery(false);
     const recentDebtsQuery = buildOpenDebtsQuery(true);
 
@@ -282,10 +260,8 @@ async function loadData() {
       productsSnap,
       usersSnap,
       stockSnap,
-      recentStockSnap,
       saleItemsSnap,
       purchasesSnap,
-      recentPurchasesSnap,
       purchaseItemsSnap
     ] = await Promise.all([
       getDocs(salesQuery),
@@ -296,10 +272,8 @@ async function loadData() {
       getDocs(collection(db, "products")),
       getDocs(collection(db, "users")),
       getDocs(stockQuery),
-      getDocs(recentStockQuery),
       getDocs(collection(db, "sale_items")),
       getDocs(purchasesQuery),
-      getDocs(recentPurchasesQuery),
       getDocs(collection(db, "purchase_items"))
     ]);
 
@@ -311,16 +285,8 @@ async function loadData() {
     state.products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.stockMovements = stockSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.recentStockMovements = recentStockSnap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
     state.saleItems = saleItemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     state.purchases = purchasesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    state.recentPurchases = recentPurchasesSnap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
     state.purchaseItems = purchaseItemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
     try {

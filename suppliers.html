@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="
+default-src 'self';
+script-src 'self' https://www.gstatic.com https://www.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com;
+connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;
+img-src 'self' data: https:;
+style-src 'self' 'unsafe-inline';
+font-src 'self' https:;
+frame-src https://*.firebaseapp.com;
+object-src 'none';
+base-uri 'self';
+form-action 'self';
+">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StockFlow - Fournisseurs</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{background:radial-gradient(circle at top,#1a1a1a,#0a0a0a 70%);color:#fff;min-height:100vh;padding:20px 15px 100px}
+.header{margin-bottom:18px}
+.header h1{font-size:26px;margin-bottom:6px;background:linear-gradient(90deg,#ffd700,#fff3b0,#ffd700);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{color:#aaa;font-size:13px;line-height:1.5}
+.toolbar,.panel{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;padding:14px;background:#151515;border-radius:14px;border:1px solid rgba(255,255,255,0.06)}
+.panel{flex-direction:column;align-items:stretch}
+.field{display:flex;flex-direction:column;gap:4px;min-width:140px;flex:1}
+.field label{font-size:12px;color:#bbb}
+.field input,.field select{background:#111;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:8px 10px;font-size:13px}
+button,.btn{background:#D4AF37;color:#111;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+button.secondary,.btn.secondary{background:#222;color:#D4AF37;border:1px solid rgba(212,175,55,0.4)}
+#statusMsg{min-height:18px;font-size:12px;color:#aaa;margin-bottom:12px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.kpi-card{background:#151515;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px}
+.kpi-label{font-size:11px;color:#aaa;margin-bottom:6px}
+.kpi-value{font-size:18px;font-weight:700;color:#ffd700}
+.section{margin-bottom:22px}
+.section-title h2{font-size:16px;margin-bottom:4px}
+.section-title p{font-size:12px;color:#888;margin-bottom:10px}
+.list{display:flex;flex-direction:column;gap:8px}
+.supplier-card,.activity-item{background:#151515;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.supplier-card:hover,.activity-item:hover{border-color:rgba(212,175,55,0.45)}
+.supplier-card.active{border-color:#D4AF37}
+.card-left{display:flex;flex-direction:column;gap:4px;min-width:0}
+.card-title{font-size:14px;font-weight:700;color:#fff}
+.card-meta{font-size:12px;color:#aaa;line-height:1.45}
+.card-value{font-size:14px;font-weight:700;color:#D4AF37;white-space:nowrap}
+.badge{font-size:10px;padding:3px 7px;border-radius:999px;background:rgba(212,175,55,0.15);color:#D4AF37;display:inline-block;margin-top:4px}
+.reco{padding:10px 12px;border-left:3px solid #D4AF37;background:#121212;border-radius:0 10px 10px 0;font-size:13px;color:#ddd;margin-bottom:8px}
+.empty{color:#777;font-size:13px;padding:12px}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-top:1px solid rgba(255,255,255,0.08);padding:8px;gap:4px;z-index:20}
+.nav-item{flex:1;text-align:center;text-decoration:none;color:#aaa;font-size:11px;padding:8px 4px}
+.nav-item.active{color:#D4AF37}
+</style>
+</head>
+<body>
+
+<header class="header" id="suppliersHeader">
+  <h1>Fournisseurs</h1>
+  <p>Achats, totaux, dettes et entrées stock — agrégation locale sur les commandes.</p>
+</header>
+
+<div class="toolbar" id="suppliersToolbar">
+  <div class="field">
+    <label for="periodFilter">Période</label>
+    <select id="periodFilter">
+      <option value="month">Mois en cours</option>
+      <option value="30d">30 jours</option>
+      <option value="7d">7 jours</option>
+      <option value="all">Tout</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="searchSupplier">Recherche</label>
+    <input id="searchSupplier" type="text" maxlength="80" placeholder="Nom fournisseur" autocomplete="off">
+  </div>
+  <button type="button" id="applyFilterBtn">Appliquer</button>
+  <a class="btn secondary" id="newPurchaseBtn" href="purchases.html">Nouvel achat</a>
+</div>
+
+<p id="statusMsg" aria-live="polite"></p>
+
+<div class="kpi-row" id="suppliersKpiRow">
+  <div class="kpi-card">
+    <div class="kpi-label">Fournisseurs</div>
+    <div class="kpi-value" id="kpiSuppliersCount">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Commandes</div>
+    <div class="kpi-value" id="kpiOrdersCount">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Total dépensé</div>
+    <div class="kpi-value" id="kpiTotalSpent">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Dettes ouvertes</div>
+    <div class="kpi-value" id="kpiOpenDebts">0</div>
+  </div>
+</div>
+
+<section class="section" id="suppliersListSection">
+  <div class="section-title">
+    <h2>Liste fournisseurs</h2>
+    <p id="filterHint">Filtre actif — cliquez une carte pour le détail.</p>
+  </div>
+  <div class="list" id="suppliersList"></div>
+</section>
+
+<section class="section" id="supplierDetailSection">
+  <div class="section-title">
+    <h2>Détail fournisseur</h2>
+    <p>Historique des achats du fournisseur sélectionné.</p>
+  </div>
+  <div class="panel" id="detailPanel">
+    <p class="card-meta" id="detailSummary">Aucun fournisseur sélectionné.</p>
+    <div class="list" id="detailPurchasesList"></div>
+  </div>
+</section>
+
+<section class="section" id="recentPurchasesSection">
+  <div class="section-title">
+    <h2>Achats récents</h2>
+    <p>Dernières commandes sur la période filtrée.</p>
+  </div>
+  <div class="list" id="recentPurchasesList"></div>
+</section>
+
+<section class="section" id="stockInSection">
+  <div class="section-title">
+    <h2>Entrées stock fournisseurs</h2>
+    <p>Mouvements IN liés aux achats (reason = purchase).</p>
+  </div>
+  <div class="list" id="stockInList"></div>
+</section>
+
+<section class="section" id="recoSection">
+  <div class="section-title">
+    <h2>Recommandations</h2>
+    <p>Générées en local — aucune requête Firebase supplémentaire.</p>
+  </div>
+  <div class="list" id="recoList"></div>
+</section>
+
+<nav>
+  <a class="nav-item" href="purchases.html">Achats</a>
+  <a class="nav-item active" href="suppliers.html">Fournisseurs</a>
+  <a class="nav-item" href="stats.html">Stats</a>
+  <a class="nav-item" href="debts.html">Dettes</a>
+  <a class="nav-item" href="pages.html">Nav</a>
+</nav>
+
+<script type="module" src="js/suppliers.js"></script>
+</body>
+</html>

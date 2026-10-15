@@ -99,10 +99,8 @@ export async function render(chartApi) {
   renderFinancialHealth(sales, expenses, losses);
   renderStockHealth();
   renderDebts();
-  renderPurchases();
   renderProducts();
   renderSellers(sales, state.saleItems);
-  renderActivity();
 
   if (state.chartReady && chartApi?.renderChart) {
     chartApi.renderChart();
@@ -314,51 +312,6 @@ function renderDebts() {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "Aucune dette client";
-    box.appendChild(empty);
-  }
-}
-
-function renderPurchases() {
-  clearNode("purchaseList");
-
-  const box = $("purchaseList");
-  if (!box) return;
-
-  const list = state.recentPurchases || [];
-
-  list.forEach(p => {
-    const item = document.createElement("div");
-    item.className = "activity-item";
-
-    const left = document.createElement("div");
-    left.className = "activity-left";
-
-    const title = document.createElement("div");
-    title.className = "activity-title";
-    title.textContent = p.supplier || "Fournisseur";
-
-    const meta = document.createElement("div");
-    meta.className = "activity-meta";
-    meta.textContent =
-      getDate(p.createdAt)?.toLocaleString() || "";
-
-    const value = document.createElement("div");
-    value.className = "activity-price";
-    value.textContent = formatMoney(getPurchaseTotal(p));
-
-    left.appendChild(title);
-    left.appendChild(meta);
-
-    item.appendChild(left);
-    item.appendChild(value);
-
-    box.appendChild(item);
-  });
-
-  if (list.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "Aucun achat sur cette période";
     box.appendChild(empty);
   }
 }
@@ -853,62 +806,3 @@ function renderSellers(sales, saleItems) {
   }
 }
 
-function renderActivity() {
-  const box = $("recentActivityList");
-  if (!box) return;
-
-  clearNode("recentActivityList");
-
-  const movements = state.recentStockMovements || [];
-
-  movements.forEach(m => {
-    const el = document.createElement("div");
-    el.className = "activity-item";
-
-    const left = document.createElement("div");
-    left.className = "activity-left";
-
-    const title = document.createElement("div");
-    title.className = "activity-title";
-
-    const product = state.products.find(p => p.id === m.productId);
-
-    const typeLabel =
-      m.type === "IN" ? "📥 Entrée stock" :
-      m.type === "OUT" ? "📤 Sortie stock" :
-      "⚙ Mouvement stock";
-
-    const reasonLabel =
-      m.reason ? ` (${m.reason})` : "";
-
-    title.textContent =
-      `${typeLabel}${reasonLabel} - ${product?.name || "Produit"}`;
-
-    const meta = document.createElement("div");
-    meta.className = "activity-meta";
-
-    const date = getDate(m.createdAt)?.toLocaleString() || "";
-
-    meta.textContent =
-      `${date} • Qty: ${m.quantity || 0}`;
-
-    const value = document.createElement("div");
-    value.className = "activity-price";
-    value.textContent = `${m.quantity || 0} pcs`;
-
-    left.appendChild(title);
-    left.appendChild(meta);
-
-    el.appendChild(left);
-    el.appendChild(value);
-
-    box.appendChild(el);
-  });
-
-  if (movements.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "Aucune activité sur cette période";
-    box.appendChild(empty);
-  }
-}
