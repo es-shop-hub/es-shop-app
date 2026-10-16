@@ -40,6 +40,9 @@ const auth = getAuth();
 let currencySymbol = "$";
 let currentUserId = null;
 let lowStockLimit = 5;
+let shopMeta = null;
+let lastPdfSnapshot = null;
+let pdfReady = false;
 
 async function checkUser(uid) {
   if (!uid) throw new Error("UID invalide");
@@ -392,6 +395,30 @@ function renderRanking(ranking, leastSoldPool, lowStockList, period) {
   const hasLowStock = lowStockList.length > 0;
   const hasLeastSold = leastSoldPool.length > 0;
 
+  const byQuantityDesc = sortByQuantityDesc(ranking);
+  const byProfitMargin = sortByProfitMargin(ranking);
+  const byRevenue = sortByRevenue(ranking);
+
+  lastPdfSnapshot = {
+    meta: {
+      ...shopMeta,
+      currencySymbol,
+      periodLabel: getPeriodLabel(period),
+      reportTitle: "Rapport Ranking produits",
+      generatedAt: new Date().toISOString()
+    },
+    kpis: {
+      soldCount: ranking.length,
+      totalQuantity: ranking.reduce((s, i) => s + (i.quantity || 0), 0),
+      totalRevenue: ranking.reduce((s, i) => s + (i.revenue || 0), 0),
+      totalProfit: ranking.reduce((s, i) => s + (i.profit || 0), 0),
+      lowStockCount: lowStockList.length
+    },
+    byQuantity: byQuantityDesc,
+    byMargin: byProfitMargin,
+    lowStock: lowStockList
+  };
+
   if (!hasSales && !hasLowStock && !hasLeastSold) {
     Object.values(containers).forEach(container => {
       showEmpty(container, "Aucune donnée sur cette période");
@@ -404,10 +431,6 @@ function renderRanking(ranking, leastSoldPool, lowStockList, period) {
     setStatus(`Période : ${getPeriodLabel(period)} — aucune vente ni alerte stock`);
     return;
   }
-
-  const byQuantityDesc = sortByQuantityDesc(ranking);
-  const byProfitMargin = sortByProfitMargin(ranking);
-  const byRevenue = sortByRevenue(ranking);
 
   const maxQty = byQuantityDesc[0]?.quantity || 1;
   const maxMarginRate = byProfitMargin[0]?.marginRate || 1;
@@ -624,6 +647,22 @@ async function loadRanking() {
   }
 }
 
+async function setupRangingPdf() {
+  if (pdfReady) return;
+  try {
+    const pdf = await import("./pdf/ranging-pdf.js");
+    pdf.initRangingPdfButton(() => lastPdfSnapshot);
+    pdfReady = true;
+  } catch (err) {
+    console.warn("[ranging] PDF:", err);
+    const btn = document.getElementById("pdfBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.title = "Export PDF indisponible";
+    }
+  }
+}
+
 bindActionButton(applyPeriodBtn, async () => {
   try {
     await loadRanking();
@@ -647,7 +686,15 @@ onAuthStateChanged(auth, async user => {
     const config = await getAppConfig();
     currencySymbol = config?.currencySymbol || "$";
     lowStockLimit = Number(config?.lowStockLimit) || 5;
+    shopMeta = {
+      shopName: config?.shopName || "StockFlow",
+      shopAddress: config?.shopAddress || "",
+      shopPhone: config?.shopPhone || "",
+      currencySymbol,
+      logoUrl: config?.logoUrl || ""
+    };
 
+    await setupRangingPdf();
     await loadRanking();
   } catch (err) {
     console.error(err);

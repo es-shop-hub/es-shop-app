@@ -68,12 +68,14 @@ bindFormAction(signupForm, async () => {
 
     const batch = writeBatch(db);
 
-    console.log("[signup] batch.set users/", uid);
+    const role = usersCount === 0 ? "admin" : "seller";
+
+    console.log("[signup] batch.set users/", uid, { role });
     batch.set(doc(db, "users", uid), {
       userId: uid,
       name: fullName,
       email,
-      role: "user",
+      role,
       isActive,
       createdAt: Timestamp.now()
     });
@@ -89,7 +91,7 @@ bindFormAction(signupForm, async () => {
     await writeLog({
       userId: uid,
       action: "signup",
-      details: { email, role: "user" }
+      details: { email, role }
     });
 
     await signOut(auth);

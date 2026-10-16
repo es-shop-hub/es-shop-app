@@ -111,12 +111,14 @@ export async function ensureFirestoreUser(user, options = {}) {
 
   const batch = writeBatch(db);
 
-  console.log("[auth-flow] batch.set users/", uid);
+  const role = usersCount === 0 ? "admin" : "seller";
+
+  console.log("[auth-flow] batch.set users/", uid, { role });
   batch.set(doc(db, "users", uid), {
     userId: uid,
     name: user.displayName || user.email?.split("@")[0] || "Utilisateur",
     email: (user.email || "").toLowerCase(),
-    role: "user",
+    role,
     isActive,
     createdAt: Timestamp.now()
   });

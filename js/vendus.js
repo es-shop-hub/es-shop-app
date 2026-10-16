@@ -33,7 +33,8 @@ const state = {
   users: [],
   debts: [],
   rows: [],
-  currency: "FC"
+  currency: "FC",
+  shopMeta: null
 };
 
 let currentUser = null;
@@ -53,9 +54,50 @@ async function loadAppCurrency() {
     const symbol = String(config?.currencySymbol || "").trim();
     const code = String(config?.currency || "").trim();
     state.currency = symbol || code || "FC";
+    state.shopMeta = {
+      shopName: config?.shopName || "StockFlow",
+      shopAddress: config?.shopAddress || "",
+      shopPhone: config?.shopPhone || "",
+      currencySymbol: state.currency,
+      logoUrl: config?.logoUrl || ""
+    };
   } catch (error) {
     console.warn("[vendus] loadAppCurrency", error);
     state.currency = "FC";
+    state.shopMeta = { shopName: "StockFlow", currencySymbol: "FC" };
+  }
+}
+
+function getVendusPeriodLabel() {
+  const range = $("statsRange")?.value || "today";
+  const labels = {
+    today: "Aujourd'hui",
+    yesterday: "Hier",
+    "7days": "7 jours",
+    "30days": "30 jours",
+    month: "Ce mois",
+    year: "Cette année",
+    custom: "Période personnalisée"
+  };
+  return labels[range] || range;
+}
+
+async function setupVendusPdf() {
+  try {
+    const pdf = await import("./pdf/vendus-pdf.js");
+    pdf.initVendusPdfButton(() =>
+      pdf.buildVendusPdfFromState(state, {
+        ...state.shopMeta,
+        periodLabel: getVendusPeriodLabel()
+      })
+    );
+  } catch (err) {
+    console.warn("[vendus] PDF:", err);
+    const btn = $("pdfBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.title = "Export PDF indisponible";
+    }
   }
 }
 
@@ -383,6 +425,7 @@ async function checkAccess(uid) {
 
   bindEvents();
   await loadMetaData();
+  await setupVendusPdf();
   await loadData();
 }
 

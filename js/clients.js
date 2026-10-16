@@ -31,6 +31,7 @@ const state = {
   sales: [],
   rewards: [],
   currency: "$",
+  shopMeta: null,
   period: "month",
   nameFilter: "",
   aggregates: [],
@@ -55,6 +56,12 @@ function formatMoney(value) {
 function getDate(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate();
+  if (typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000);
+  }
+  if (typeof value._seconds === "number") {
+    return new Date(value._seconds * 1000);
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -111,11 +118,57 @@ function rewardSumForNameKey(nameKey) {
   );
 }
 
+function firestoreErrorMessage(err, fallback = "Erreur") {
+  if (err?.code === "permission-denied") {
+    return "Permissions insuffisantes. Rôle admin ou seller requis, et règles Firestore clients à jour.";
+  }
+  return err?.message || fallback;
+}
+
+/**
+ * Compte unique encore en role legacy "user" → admin
+ * (débloquer Clients / écritures isActiveMember).
+ */
+async function bootstrapSoleAdminIfNeeded(uid, data) {
+  if (!data || data.role === "admin" || data.role === "seller") {
+    return data;
+  }
+  if (data.role !== "user" || !data.isActive) {
+    return data;
+  }
+
+  try {
+    const usersSnap = await getDocs(collection(db, "users"));
+    if (usersSnap.size > 1) {
+      return data;
+    }
+
+    await updateDoc(doc(db, "users", uid), {
+      role: "admin",
+      updatedAt: Timestamp.now()
+    });
+    return { ...data, role: "admin" };
+  } catch (err) {
+    console.error("[clients] bootstrap admin:", err);
+    throw new Error(
+      "Compte bloqué (rôle legacy « user »). Déployez les règles Firestore à jour, ou définissez role=admin dans la Console Firebase."
+    );
+  }
+}
+
 async function checkUser(uid) {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) throw new Error("Utilisateur introuvable");
-  const data = snap.data();
+  let data = snap.data();
   if (!data?.isActive) throw new Error("Compte désactivé");
+
+  data = await bootstrapSoleAdminIfNeeded(uid, data);
+
+  if (data.role !== "admin" && data.role !== "seller") {
+    throw new Error(
+      "Rôle non autorisé. Un compte admin ou seller est requis pour Clients."
+    );
+  }
   return data;
 }
 
@@ -605,7 +658,7 @@ async function editClientProfile(row) {
     setStatus("Client mis à jour.");
   } catch (err) {
     console.error(err);
-    alert(err?.message || "Impossible de modifier le client.");
+    alert(firestoreErrorMessage(err, "Impossible de modifier le client."));
   }
 }
 
@@ -793,22 +846,82 @@ async function handleSaveReward() {
 
 async function refreshAll() {
   setStatus("Chargement…");
-  const [clients, sales, rewards] = await Promise.all([
+
+  const settled = await Promise.allSettled([
     loadClients(),
     loadSales(),
     loadClientRewards(currentMonthKey())
   ]);
-  state.clients = clients;
-  state.sales = sales;
-  state.rewards = rewards;
+
+  const [clientsRes, salesRes, rewardsRes] = settled;
+
+  if (salesRes.status === "rejected") {
+    throw salesRes.reason;
+  }
+
+  state.sales = salesRes.value || [];
+  state.clients =
+    clientsRes.status === "fulfilled" ? clientsRes.value || [] : [];
+  state.rewards =
+    rewardsRes.status === "fulfilled" ? rewardsRes.value || [] : [];
+
+  if (clientsRes.status === "rejected") {
+    console.error("[clients] loadClients:", clientsRes.reason);
+  }
+  if (rewardsRes.status === "rejected") {
+    console.error("[clients] loadClientRewards:", rewardsRes.reason);
+  }
+
   buildAggregates();
-  setStatus("Prêt.");
+
+  const partial =
+    clientsRes.status === "rejected" || rewardsRes.status === "rejected";
+  setStatus(
+    partial
+      ? "Prêt (registre clients / récompenses partiel — vérifiez les règles Firestore)."
+      : "Prêt."
+  );
 }
 
 function applyClientFilters() {
   state.period = $("periodFilter")?.value || "month";
   state.nameFilter = sanitizeClientName($("clientNameFilter")?.value || "");
   buildAggregates();
+}
+
+async function setupClientsPdf() {
+  try {
+    const pdf = await import("./pdf/clients-pdf.js");
+    pdf.initClientsPdfButton(() => {
+      const { label } = getPeriodBounds(state.period);
+      const nameTerm = state.nameFilter;
+      const rewardsTotal = state.rewards
+        .filter(r => {
+          if ((r.status || "active") !== "active") return false;
+          if (!nameTerm) return true;
+          return matchesNameFilter(
+            {
+              name: r.clientName || "",
+              nameKey: normalizeClientNameKey(r.clientName || "")
+            },
+            nameTerm
+          );
+        })
+        .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      return pdf.buildClientsPdfPayload(state, state.shopMeta, {
+        periodLabel: label,
+        periodProfit: state.totalPeriodProfit,
+        rewardsTotal
+      });
+    });
+  } catch (err) {
+    console.warn("[clients] PDF:", err);
+    const btn = $("pdfBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.title = "Export PDF indisponible";
+    }
+  }
 }
 
 function bindEvents() {
@@ -824,9 +937,23 @@ function bindEvents() {
   });
 
   $("catchupSale")?.addEventListener("change", updateCatchupAmount);
-  bindActionButton($("catchupSaveBtn"), handleCatchup);
+  bindActionButton($("catchupSaveBtn"), async () => {
+    try {
+      await handleCatchup();
+    } catch (err) {
+      console.error(err);
+      alert(firestoreErrorMessage(err, "Impossible d'enregistrer le client."));
+    }
+  });
   bindActionButton($("calcRewardBtn"), async () => calcRewardLocal());
-  bindActionButton($("saveRewardBtn"), handleSaveReward);
+  bindActionButton($("saveRewardBtn"), async () => {
+    try {
+      await handleSaveReward();
+    } catch (err) {
+      console.error(err);
+      alert(firestoreErrorMessage(err, "Impossible d'enregistrer la récompense."));
+    }
+  });
 
   $("clientDetailModalClose")?.addEventListener("click", () => {
     closeDetailPopup();
@@ -855,12 +982,21 @@ onAuthStateChanged(auth, async user => {
       String(config?.currencySymbol || "").trim() ||
       String(config?.currency || "").trim() ||
       "$";
+    state.shopMeta = {
+      shopName: config?.shopName || "StockFlow",
+      shopAddress: config?.shopAddress || "",
+      shopPhone: config?.shopPhone || "",
+      currencySymbol: state.currency,
+      logoUrl: config?.logoUrl || ""
+    };
     clearDetailSummary();
     bindEvents();
+    await setupClientsPdf();
     await refreshAll();
   } catch (err) {
     console.error(err);
-    setStatus(err.message || "Erreur");
-    alert(err.message || "Accès refusé");
+    const msg = firestoreErrorMessage(err, "Accès refusé");
+    setStatus(msg);
+    alert(msg);
   }
 });

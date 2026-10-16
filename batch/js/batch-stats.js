@@ -13,10 +13,14 @@ import {
   statusBadge
 } from "./batch-utils.js";
 import { bindActionButton } from "../../js/utils/buttonManager.js";
+import { getAppConfig } from "../../js/appConfig.js";
 
 const auth = getAuth();
 let products = [];
 let productsMap = {};
+let shopMeta = null;
+let lastStats = null;
+let pdfReady = false;
 
 const els = {
   kpiCollected: document.getElementById("kpiCollected"),
@@ -230,6 +234,7 @@ async function refreshStats() {
       : batches;
 
     const stats = aggregateBatchStats(filteredBatches, movements, productsMap);
+    lastStats = stats;
 
     renderKpis(stats);
     renderProductTable(stats.byProduct);
@@ -243,6 +248,32 @@ async function refreshStats() {
   }
 }
 
+async function setupBatchStatsPdf() {
+  if (pdfReady) return;
+  try {
+    const pdf = await import("../../js/pdf/batch-stats-pdf.js");
+    pdf.initBatchStatsPdfButton(() => {
+      const productFilter = els.filterProduct?.value || "";
+      const productName = productFilter
+        ? productsMap[productFilter]?.name || productFilter
+        : "Tous les produits";
+      return pdf.buildBatchStatsPdfPayload(
+        lastStats,
+        shopMeta,
+        `Lots — ${productName}`
+      );
+    });
+    pdfReady = true;
+  } catch (err) {
+    console.warn("[batch-stats] PDF:", err);
+    const btn = document.getElementById("pdfBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.title = "Export PDF indisponible";
+    }
+  }
+}
+
 bindActionButton(document.getElementById("applyFilterBtn"), refreshStats);
 
 onAuthStateChanged(auth, async user => {
@@ -250,5 +281,18 @@ onAuthStateChanged(auth, async user => {
     blockAccess();
     return;
   }
+  try {
+    const config = await getAppConfig();
+    shopMeta = {
+      shopName: config?.shopName || "StockFlow",
+      shopAddress: config?.shopAddress || "",
+      shopPhone: config?.shopPhone || "",
+      currencySymbol: config?.currencySymbol || config?.currency || "$",
+      logoUrl: config?.logoUrl || ""
+    };
+  } catch (_) {
+    shopMeta = { shopName: "StockFlow", currencySymbol: "$" };
+  }
+  await setupBatchStatsPdf();
   await refreshStats();
 });

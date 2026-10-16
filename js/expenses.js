@@ -27,12 +27,14 @@ import {
 import { showToast } from "./finance/toast.js";
 import { injectOptions } from "./filter.js";
 import { bindActionButton } from "./utils/buttonManager.js";
+import { getAppConfig } from "./appConfig.js";
 
 const auth = getAuth();
 let currentUserId = null;
 let allData = [];
 let currentPage = 1;
 let currentEditId = null;
+let shopMeta = null;
 
 const list = document.getElementById("recordsList");
 const startDate = document.getElementById("startDate");
@@ -68,6 +70,7 @@ function getFiltered() {
 
     const matchSearch =
       !search ||
+      (item.label || "").toLowerCase().includes(search) ||
       (item.reason || "").toLowerCase().includes(search) ||
       (item.category || "").toLowerCase().includes(search) ||
       (item.relatedTo || "").toLowerCase().includes(search);
@@ -264,6 +267,28 @@ filterCategory?.addEventListener("change", () => render(1));
 startDate?.addEventListener("change", () => render(1));
 endDate?.addEventListener("change", () => render(1));
 
+async function setupExpensesPdf() {
+  try {
+    const pdf = await import("./pdf/expenses-pdf.js");
+    pdf.initExpensesPdfButton(() => {
+      const start = startDate?.value || "";
+      const end = endDate?.value || "";
+      const periodLabel =
+        start || end
+          ? `Du ${start || "…"} au ${end || "…"}`
+          : "Tous les enregistrements chargés";
+      return pdf.buildExpensesPdfPayload(getFiltered(), shopMeta, periodLabel);
+    });
+  } catch (err) {
+    console.warn("[expenses] PDF:", err);
+    const btn = document.getElementById("pdfBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.title = "Export PDF indisponible";
+    }
+  }
+}
+
 onAuthStateChanged(auth, async user => {
   if (!user) {
     location.href = "login.html";
@@ -276,5 +301,19 @@ onAuthStateChanged(auth, async user => {
     initFinanceActivityNotifications();
   }
 
+  try {
+    const config = await getAppConfig();
+    shopMeta = {
+      shopName: config?.shopName || "StockFlow",
+      shopAddress: config?.shopAddress || "",
+      shopPhone: config?.shopPhone || "",
+      currencySymbol: config?.currencySymbol || config?.currency || "FC",
+      logoUrl: config?.logoUrl || ""
+    };
+  } catch (_) {
+    shopMeta = { shopName: "StockFlow", currencySymbol: "FC" };
+  }
+
+  await setupExpensesPdf();
   await loadData();
 });

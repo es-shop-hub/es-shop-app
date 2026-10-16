@@ -10,6 +10,7 @@ import {
   Legend,
   Filler
 } from "https://cdn.jsdelivr.net/npm/chart.js/+esm";
+import zoomPlugin from "https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/+esm";
 
 Chart.register(
   LineController,
@@ -20,7 +21,8 @@ Chart.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  zoomPlugin
 );
 
 let statsChart = null;
@@ -226,35 +228,31 @@ function renderMetricTiles(totals = zeroTotals()) {
     btn.className = on ? "chart-metric-tile" : "chart-metric-tile is-off";
     btn.id = `chartTile_${def.id}`;
     btn.dataset.seriesId = def.id;
+    btn.title = `${def.group} · ${def.label}`;
     btn.setAttribute("aria-pressed", on ? "true" : "false");
     if (on) {
-      btn.style.background = def.color;
-      btn.style.color = "#fff";
+      btn.style.borderColor = def.color;
+      btn.style.background = `${def.color}18`;
+      btn.style.color = "#111";
     }
+
+    const dot = document.createElement("span");
+    dot.className = "chart-metric-dot";
+    dot.style.background = def.color;
 
     const checkRow = document.createElement("div");
     checkRow.className = "chart-metric-check";
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = on;
-    checkbox.tabIndex = -1;
-    checkbox.setAttribute("aria-hidden", "true");
-
     const label = document.createElement("span");
     label.textContent = def.label;
 
-    checkRow.append(checkbox, label);
+    checkRow.append(label);
 
     const valueEl = document.createElement("div");
     valueEl.className = "chart-metric-value";
     valueEl.textContent = formatTileValue(def.kind, totals[def.id] || 0);
 
-    const groupEl = document.createElement("div");
-    groupEl.className = "chart-metric-group";
-    groupEl.textContent = def.group;
-
-    btn.append(checkRow, valueEl, groupEl);
+    btn.append(dot, checkRow, valueEl);
     frag.appendChild(btn);
   });
 
@@ -275,6 +273,16 @@ function bindMetricGrid() {
     seriesEnabled[id] = !seriesEnabled[id];
     renderChart();
   });
+
+  const resetBtn = document.getElementById("chartResetZoomBtn");
+  if (resetBtn && resetBtn.dataset.zoomBound !== "1") {
+    resetBtn.dataset.zoomBound = "1";
+    resetBtn.addEventListener("click", () => {
+      if (statsChart?.resetZoom) {
+        statsChart.resetZoom();
+      }
+    });
+  }
 }
 
 export function renderChart() {
@@ -381,20 +389,54 @@ export function renderChart() {
         interaction: { intersect: false, mode: "index" },
         plugins: {
           legend: {
-            display: true,
-            labels: { boxWidth: 12, font: { size: 11 }, color: "#ccc" }
+            display: false
+          },
+          tooltip: {
+            titleFont: { size: 11 },
+            bodyFont: { size: 11 }
+          },
+          zoom: {
+            limits: {
+              x: { min: "original", max: "original" },
+              y: { min: "original", max: "original" }
+            },
+            pan: {
+              enabled: true,
+              mode: "xy",
+              modifierKey: null
+            },
+            zoom: {
+              wheel: { enabled: true, speed: 0.08 },
+              pinch: { enabled: true },
+              mode: "xy",
+              drag: {
+                enabled: false
+              }
+            }
           }
         },
         scales: {
           x: {
             display: true,
-            grid: { display: false },
-            ticks: { color: "#aaa", maxRotation: 0 }
+            border: { display: true, color: "rgba(0,0,0,0.12)" },
+            grid: {
+              display: true,
+              drawOnChartArea: true,
+              color: "rgba(0,0,0,0.08)",
+              lineWidth: 1
+            },
+            ticks: { color: "#667085", maxRotation: 0, font: { size: 10 } }
           },
           y: {
             beginAtZero: true,
-            ticks: { color: "#aaa" },
-            grid: { color: "rgba(255,255,255,0.06)" }
+            border: { display: true, color: "rgba(0,0,0,0.12)" },
+            ticks: { color: "#667085", font: { size: 10 } },
+            grid: {
+              display: true,
+              drawOnChartArea: true,
+              color: "rgba(0,0,0,0.1)",
+              lineWidth: 1
+            }
           }
         }
       }

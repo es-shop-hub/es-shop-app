@@ -546,6 +546,13 @@ function buildPdfPayload() {
 
   const netProfit = totalProfit - totalExpenses - totalLosses;
 
+  const stockValue = products.reduce((sum, product) => {
+    return sum + n(product.stock_current) * n(product.price_buy);
+  }, 0);
+
+  const batchStats = state.batchStats || {};
+  const classicCa = sales.reduce((sum, sale) => sum + n(sale.total_amount), 0);
+
   const salesWithProducts = sales.map(sale => {
     const items = saleItems
       .filter(item =>
@@ -606,7 +613,14 @@ function buildPdfPayload() {
       operatingExpenses,
       excludedInvestment,
       excludedReinvestment,
-      operationalNetProfit
+      operationalNetProfit,
+      stockValue
+    },
+    batch: {
+      collected: n(batchStats.totalCollected),
+      benefitDisplay: n(batchStats.benefitDisplay),
+      stockRemaining: n(batchStats.totalStockRemaining),
+      classicCa
     },
     sales: salesWithProducts,
     debts: debts.map(debt => ({
@@ -660,9 +674,8 @@ async function setupChartModule() {
 
 async function setupPdfModule() {
   try {
-    const pdf = await import("./download.js");
-    pdf.initPdfExport(buildPdfPayload);
-    pdf.initPdfExportButton();
+    const pdf = await import("./pdf/stats-pdf.js");
+    pdf.initStatsPdfButton(buildPdfPayload);
   } catch (error) {
     console.warn("PDF module:", error);
     const btn = $("pdfBtn");

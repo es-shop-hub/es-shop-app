@@ -26,7 +26,7 @@ const state = {
   debts: [],
   stockIns: [],
   currency: "$",
-  period: "month",
+  period: "all",
   search: "",
   aggregates: [],
   selected: null,
@@ -52,6 +52,12 @@ function formatMoney(value) {
 function getDate(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate();
+  if (typeof value.seconds === "number") {
+    return new Date(value.seconds * 1000);
+  }
+  if (typeof value._seconds === "number") {
+    return new Date(value._seconds * 1000);
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -100,7 +106,8 @@ function getPeriodBounds(period) {
 
 function inPeriod(createdAt, start, end) {
   const d = getDate(createdAt);
-  if (!d) return false;
+  // Sans date : inclus seulement si filtre « toute la période »
+  if (!d) return start == null;
   if (end && d > end) return false;
   if (start && d < start) return false;
   return true;
@@ -517,36 +524,75 @@ function renderRecommendations(periodPurchases) {
   });
 }
 
-async function loadData() {
-  const purchasesSnap = await getDocs(
-    query(collection(db, "purchases"), orderBy("createdAt", "desc"))
-  );
+async function loadPurchases() {
+  try {
+    const snap = await getDocs(
+      query(collection(db, "purchases"), orderBy("createdAt", "desc"))
+    );
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn("[suppliers] orderBy purchases échoué → fallback:", err);
+    const snap = await getDocs(collection(db, "purchases"));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort(
+        (a, b) =>
+          (getDate(b.createdAt)?.getTime() || 0) -
+          (getDate(a.createdAt)?.getTime() || 0)
+      );
+  }
+}
 
-  const [
-    itemsSnap,
-    productsSnap,
-    debtsSnap,
-    stockSnap
-  ] = await Promise.all([
-    getDocs(collection(db, "purchase_items")),
-    getDocs(collection(db, "products")),
-    getDocs(collection(db, "debts")),
-    getDocs(
-      query(
-        collection(db, "stock_movements"),
-        orderBy("createdAt", "desc"),
-        limit(80)
+async function safeGetDocs(label, loader) {
+  try {
+    return await loader();
+  } catch (err) {
+    console.error(`[suppliers] ${label}:`, err);
+    return null;
+  }
+}
+
+async function loadData() {
+  const purchases = await loadPurchases();
+
+  const [itemsSnap, productsSnap, debtsSnap, stockSnap] = await Promise.all([
+    safeGetDocs("purchase_items", () => getDocs(collection(db, "purchase_items"))),
+    safeGetDocs("products", () => getDocs(collection(db, "products"))),
+    safeGetDocs("debts", () => getDocs(collection(db, "debts"))),
+    safeGetDocs("stock_movements", () =>
+      getDocs(
+        query(
+          collection(db, "stock_movements"),
+          orderBy("createdAt", "desc"),
+          limit(80)
+        )
       )
-    )
+    ).then(async snap => {
+      if (snap) return snap;
+      return safeGetDocs("stock_movements_fallback", () =>
+        getDocs(collection(db, "stock_movements"))
+      );
+    })
   ]);
 
-  state.purchases = purchasesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  state.purchaseItems = itemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  state.products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  state.debts = debtsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  state.stockIns = stockSnap.docs
+  state.purchases = purchases;
+  state.purchaseItems = itemsSnap
+    ? itemsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    : [];
+  state.products = productsSnap
+    ? productsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    : [];
+  state.debts = debtsSnap
+    ? debtsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    : [];
+  state.stockIns = (stockSnap ? stockSnap.docs : [])
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(m => m.type === "IN" && m.reason === "purchase");
+    .filter(m => m.type === "IN" && m.reason === "purchase")
+    .sort(
+      (a, b) =>
+        (getDate(b.createdAt)?.getTime() || 0) -
+        (getDate(a.createdAt)?.getTime() || 0)
+    );
 }
 
 async function refreshAll() {
@@ -557,7 +603,7 @@ async function refreshAll() {
 }
 
 function applyFilters() {
-  state.period = $("periodFilter")?.value || "month";
+  state.period = $("periodFilter")?.value || "all";
   state.search = $("searchSupplier")?.value || "";
   buildAggregates();
 }
@@ -593,7 +639,11 @@ onAuthStateChanged(auth, async user => {
     await refreshAll();
   } catch (err) {
     console.error(err);
-    setStatus(err.message || "Erreur");
-    alert(err.message || "Accès refusé");
+    const msg =
+      err?.code === "permission-denied"
+        ? "Permissions insuffisantes pour charger les achats."
+        : err?.message || "Erreur";
+    setStatus(msg);
+    alert(msg);
   }
 });

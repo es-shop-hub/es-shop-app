@@ -63,17 +63,39 @@ service cloud.firestore {
         && !userExists(userId);
     }
 
+    // Signup : 1er compte = admin (usersCount == 0), suivants = seller.
+    // Rôles métier uniquement : admin | seller (pas de rôle inventé).
     function validUserCreate() {
       return request.resource.data.userId == request.auth.uid
         && request.resource.data.keys().hasAll([
           'userId', 'name', 'role', 'isActive', 'createdAt'
         ])
-        // Signup public = role "user" uniquement (promotion seller/admin via isAdmin)
-        && request.resource.data.role == 'user'
+        && validRole(request.resource.data.role)
+        && (
+          (request.resource.data.role == 'admin'
+            && (!metaExists() || metaDoc().data.usersCount == 0))
+          ||
+          (request.resource.data.role == 'seller'
+            && metaExists()
+            && metaDoc().data.usersCount > 0)
+        )
         && request.resource.data.isActive is bool
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 120;
+    }
+
+    // Compte unique encore en role legacy "user" → auto-promotion admin
+    function canBootstrapSoleAdmin(userId) {
+      return signedIn()
+        && request.auth.uid == userId
+        && userExists(userId)
+        && resource.data.role == 'user'
+        && request.resource.data.role == 'admin'
+        && request.resource.data.isActive == true
+        && request.resource.data.userId == resource.data.userId
+        && metaExists()
+        && metaDoc().data.usersCount <= 1;
     }
 
     function validMetaCreate() {
@@ -123,7 +145,9 @@ service cloud.firestore {
         && validUserCreate();
 
       // Self-update : role, userId, isActive immuables (anti self-réactivation)
+      // Exception : seul compte legacy role "user" → admin (bootstrap)
       allow update: if isAdmin()
+        || canBootstrapSoleAdmin(userId)
         || (
           signedIn()
           && request.auth.uid == userId

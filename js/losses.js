@@ -468,6 +468,30 @@ document.getElementById("lossCorrectionCancelBtn")?.addEventListener("click", ()
 
 searchInput?.addEventListener("input", () => render(1));
 
+let shopMeta = null;
+
+async function setupLossesPdf() {
+  try {
+    const pdf = await import("./pdf/losses-pdf.js");
+    pdf.initLossesPdfButton(() => {
+      const start = startDate?.value || "";
+      const end = endDate?.value || "";
+      const periodLabel =
+        start || end
+          ? `Du ${start || "…"} au ${end || "…"}`
+          : "Tous les enregistrements chargés";
+      return pdf.buildLossesPdfPayload(getFiltered(), shopMeta, periodLabel);
+    });
+  } catch (err) {
+    console.warn("[losses] PDF:", err);
+    const btn = document.getElementById("pdfBtn");
+    if (btn) {
+      btn.disabled = true;
+      btn.title = "Export PDF indisponible";
+    }
+  }
+}
+
 onAuthStateChanged(auth, async user => {
   if (!user) {
     location.href = "login.html";
@@ -479,14 +503,23 @@ onAuthStateChanged(auth, async user => {
   try {
     const cfg = await getAppConfig();
     expirationFeatureEnabled = isExpirationEnabled(cfg);
+    shopMeta = {
+      shopName: cfg?.shopName || "StockFlow",
+      shopAddress: cfg?.shopAddress || "",
+      shopPhone: cfg?.shopPhone || "",
+      currencySymbol: cfg?.currencySymbol || cfg?.currency || "FC",
+      logoUrl: cfg?.logoUrl || ""
+    };
   } catch (err) {
     console.error(err);
+    shopMeta = { shopName: "StockFlow", currencySymbol: "FC" };
   }
 
   if (getNotificationPermission() === "granted") {
     initFinanceActivityNotifications();
   }
 
+  await setupLossesPdf();
   await loadProducts();
   await loadData();
 });

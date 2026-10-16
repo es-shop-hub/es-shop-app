@@ -1,4 +1,4 @@
-const CACHE_NAME = "stockflow v3";
+const CACHE_NAME = "stockflow v4";
 const BASE_PATH =
   self.location.pathname.replace(/\/service-worker\.js$/, "") || "";
 const withBase = (path) => {
@@ -78,6 +78,15 @@ const CORE_ASSETS = [
   "/js/filter.js",
   "/js/chart.js",
   "/js/download.js",
+  "/js/pdf/pdf-core.js",
+  "/js/pdf/stats-pdf.js",
+  "/js/pdf/vendus-pdf.js",
+  "/js/pdf/clients-pdf.js",
+  "/js/pdf/ranging-pdf.js",
+  "/js/pdf/expenses-pdf.js",
+  "/js/pdf/debts-pdf.js",
+  "/js/pdf/losses-pdf.js",
+  "/js/pdf/batch-stats-pdf.js",
   "/js/calcule.js",
   "/js/firebase.js"
 ].map(withBase);
