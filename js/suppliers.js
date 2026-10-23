@@ -11,6 +11,11 @@ import {
 import { getAuth, onAuthStateChanged } from "./auth.js";
 import { getAppConfig } from "./appConfig.js";
 import { bindActionButton } from "./utils/buttonManager.js";
+import {
+  isAllowedRole,
+  isPendingRole,
+  pendingRoleMessage
+} from "./auth-flow.js";
 
 const auth = getAuth();
 const $ = id => document.getElementById(id);
@@ -18,6 +23,17 @@ const n = v => Number(v) || 0;
 
 const STOCK_IN_LIMIT = 15;
 const RECENT_PURCHASES_LIMIT = 20;
+
+const PERIOD_LABELS = {
+  today: "Aujourd'hui",
+  yesterday: "Hier",
+  "7days": "7 derniers jours",
+  "30days": "30 derniers jours",
+  month: "Ce mois",
+  year: "Cette année",
+  custom: "Personnalisé",
+  all: "Toute la période"
+};
 
 const state = {
   purchases: [],
@@ -30,6 +46,7 @@ const state = {
   search: "",
   aggregates: [],
   selected: null,
+  selectedPurchaseId: null,
   userId: null
 };
 
@@ -78,30 +95,130 @@ function normalizeSupplierKey(name) {
     .trim();
 }
 
-function getPeriodBounds(period) {
+function updateDateLimits() {
+  const dateFrom = $("dateFrom");
+  const dateTo = $("dateTo");
+  if (!dateFrom || !dateTo) return;
+
+  const today = new Date().toISOString().split("T")[0];
+  dateFrom.max = today;
+  dateTo.max = today;
+
+  if (dateFrom.value) {
+    dateTo.min = dateFrom.value;
+  } else {
+    dateTo.removeAttribute("min");
+  }
+
+  if (dateFrom.value && dateTo.value && dateTo.value < dateFrom.value) {
+    dateTo.value = dateFrom.value;
+  }
+}
+
+function syncCustomDateInputs() {
+  const custom = ($("periodFilter")?.value || "") === "custom";
+  const dateFrom = $("dateFrom");
+  const dateTo = $("dateTo");
+  if (dateFrom) dateFrom.disabled = !custom;
+  if (dateTo) dateTo.disabled = !custom;
+  updateDateLimits();
+}
+
+function getPeriodBounds(period = state.period) {
   const now = new Date();
-  const end = new Date(now);
+  let start = null;
+  let end = new Date(now);
   end.setHours(23, 59, 59, 999);
 
-  if (period === "all") {
-    return { start: null, end, label: "Toute la période" };
+  // Compat anciennes valeurs UI (7d / 30d)
+  const normalized =
+    period === "7d" ? "7days" : period === "30d" ? "30days" : period;
+
+  switch (normalized) {
+    case "all":
+      return { start: null, end, label: PERIOD_LABELS.all };
+
+    case "today":
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+
+    case "yesterday":
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        23,
+        59,
+        59,
+        999
+      );
+      break;
+
+    case "7days":
+      start = new Date(now.getTime() - 7 * 86400000);
+      start.setHours(0, 0, 0, 0);
+      break;
+
+    case "30days":
+      start = new Date(now.getTime() - 30 * 86400000);
+      start.setHours(0, 0, 0, 0);
+      break;
+
+    case "month":
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      break;
+
+    case "year":
+      start = new Date(now.getFullYear(), 0, 1);
+      start.setHours(0, 0, 0, 0);
+      break;
+
+    case "custom": {
+      const from = $("dateFrom")?.value;
+      const to = $("dateTo")?.value;
+      if (from && to) {
+        start = new Date(from);
+        start.setHours(0, 0, 0, 0);
+        end = new Date(to);
+        end.setHours(23, 59, 59, 999);
+      }
+      break;
+    }
+
+    default:
+      start = new Date(now.getTime() - 30 * 86400000);
+      start.setHours(0, 0, 0, 0);
+      break;
   }
 
-  if (period === "7d") {
-    const start = new Date(now.getTime() - 7 * 86400000);
-    start.setHours(0, 0, 0, 0);
-    return { start, end, label: "7 derniers jours" };
-  }
+  return {
+    start,
+    end,
+    label: PERIOD_LABELS[normalized] || PERIOD_LABELS["30days"]
+  };
+}
 
-  if (period === "30d") {
-    const start = new Date(now.getTime() - 30 * 86400000);
-    start.setHours(0, 0, 0, 0);
-    return { start, end, label: "30 derniers jours" };
-  }
+function getProductName(productId) {
+  if (!productId) return "Produit";
+  const product = state.products.find(p => p.id === productId);
+  if (!product) return "Produit";
+  const variant = product.variant ? ` (${product.variant})` : "";
+  return `${product.name || "Produit"}${variant}`;
+}
 
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  return { start, end, label: "Mois en cours" };
+function getItemsForPurchase(purchaseId) {
+  if (!purchaseId) return [];
+  return state.purchaseItems.filter(
+    i => (i.purchaseId || i.purchase_id) === purchaseId
+  );
+}
+
+function itemLineTotal(item) {
+  return round2(
+    n(item.quantity) * n(item.price ?? item.unitPrice ?? item.purchase_price)
+  );
 }
 
 function inPeriod(createdAt, start, end) {
@@ -134,6 +251,12 @@ async function checkUser(uid) {
   if (!snap.exists()) throw new Error("Utilisateur introuvable");
   const data = snap.data();
   if (!data?.isActive) throw new Error("Compte désactivé");
+  if (isPendingRole(data.role)) {
+    throw new Error(pendingRoleMessage());
+  }
+  if (!isAllowedRole(data.role)) {
+    throw new Error("Rôle non autorisé. Un compte admin ou seller est requis.");
+  }
   return data;
 }
 
@@ -198,6 +321,14 @@ function buildAggregates() {
       a => a.nameKey === state.selected.nameKey
     );
     state.selected = still || null;
+    if (!state.selected) {
+      state.selectedPurchaseId = null;
+    } else if (state.selectedPurchaseId) {
+      const stillPurchase = state.selected.purchases.some(
+        p => p.id === state.selectedPurchaseId
+      );
+      if (!stillPurchase) state.selectedPurchaseId = null;
+    }
   }
 
   renderKpis(periodPurchases);
@@ -284,6 +415,7 @@ function renderSuppliersList() {
 
     card.addEventListener("click", () => {
       state.selected = row;
+      state.selectedPurchaseId = null;
       renderSuppliersList();
       renderDetail();
     });
@@ -292,6 +424,82 @@ function renderSuppliersList() {
   });
 
   box.appendChild(fragment);
+}
+
+function renderPurchaseItems(purchase) {
+  const panel = $("purchaseItemsPanel");
+  const list = $("purchaseItemsList");
+  const title = $("purchaseItemsTitle");
+  const footer = $("purchaseItemsFooter");
+  if (!panel || !list) return;
+
+  list.replaceChildren();
+
+  if (!purchase) {
+    panel.hidden = true;
+    if (title) title.textContent = "Lignes d'achat";
+    if (footer) footer.textContent = "";
+    return;
+  }
+
+  panel.hidden = false;
+  const dateLabel =
+    getDate(purchase.createdAt)?.toLocaleString("fr-FR") || "Sans date";
+  if (title) {
+    title.textContent = `Lignes d'achat — ${dateLabel}`;
+  }
+
+  const items = getItemsForPurchase(purchase.id);
+  if (items.length === 0) {
+    appendEmpty(list, "Aucune ligne purchase_items pour cet achat");
+    if (footer) {
+      footer.textContent = `Total commande : ${formatMoney(getPurchaseTotal(purchase))}`;
+    }
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  let linesTotal = 0;
+
+  items.forEach((line, index) => {
+    const qty = n(line.quantity);
+    const price = n(line.price ?? line.unitPrice ?? line.purchase_price);
+    const lineTotal = itemLineTotal(line);
+    linesTotal = round2(linesTotal + lineTotal);
+
+    const row = document.createElement("div");
+    row.className = "purchase-item-row";
+    row.id = `purchase-item-${purchase.id}-${line.id || index}`;
+
+    const left = document.createElement("div");
+    left.className = "purchase-item-left";
+
+    const name = document.createElement("div");
+    name.className = "purchase-item-name";
+    name.textContent = getProductName(line.productId);
+
+    const meta = document.createElement("div");
+    meta.className = "purchase-item-meta";
+    meta.textContent = `Qté ${qty} × ${formatMoney(price)}`;
+
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    const totalEl = document.createElement("div");
+    totalEl.className = "purchase-item-total";
+    totalEl.textContent = formatMoney(lineTotal);
+
+    row.appendChild(left);
+    row.appendChild(totalEl);
+    fragment.appendChild(row);
+  });
+
+  list.appendChild(fragment);
+
+  if (footer) {
+    const docTotal = getPurchaseTotal(purchase);
+    footer.textContent = `Sous-total lignes : ${formatMoney(linesTotal)} • Total commande : ${formatMoney(docTotal)}`;
+  }
 }
 
 function renderDetail() {
@@ -303,6 +511,8 @@ function renderDetail() {
 
   if (!state.selected) {
     summary.textContent = "Aucun fournisseur sélectionné.";
+    state.selectedPurchaseId = null;
+    renderPurchaseItems(null);
     return;
   }
 
@@ -317,27 +527,39 @@ function renderDetail() {
 
   if (purchases.length === 0) {
     appendEmpty(list, "Aucun achat pour ce fournisseur");
+    renderPurchaseItems(null);
     return;
+  }
+
+  if (
+    state.selectedPurchaseId &&
+    !purchases.some(p => p.id === state.selectedPurchaseId)
+  ) {
+    state.selectedPurchaseId = null;
   }
 
   const fragment = document.createDocumentFragment();
 
   purchases.forEach(p => {
+    const itemsCount = getItemsForPurchase(p.id).length;
     const item = document.createElement("div");
     item.className = "activity-item";
     item.id = `detail-purchase-${p.id}`;
-    item.style.cursor = "default";
+    if (state.selectedPurchaseId === p.id) {
+      item.classList.add("active");
+    }
 
     const left = document.createElement("div");
     left.className = "card-left";
 
     const title = document.createElement("div");
     title.className = "card-title";
-    title.textContent = getDate(p.createdAt)?.toLocaleString("fr-FR") || "Sans date";
+    title.textContent =
+      getDate(p.createdAt)?.toLocaleString("fr-FR") || "Sans date";
 
     const meta = document.createElement("div");
     meta.className = "card-meta";
-    meta.textContent = `Réf. ${p.id}`;
+    meta.textContent = `${itemsCount} ligne(s) • Réf. ${p.id}`;
 
     left.appendChild(title);
     left.appendChild(meta);
@@ -348,10 +570,22 @@ function renderDetail() {
 
     item.appendChild(left);
     item.appendChild(value);
+
+    item.addEventListener("click", () => {
+      state.selectedPurchaseId =
+        state.selectedPurchaseId === p.id ? null : p.id;
+      renderDetail();
+    });
+
     fragment.appendChild(item);
   });
 
   list.appendChild(fragment);
+
+  const selectedPurchase = purchases.find(
+    p => p.id === state.selectedPurchaseId
+  );
+  renderPurchaseItems(selectedPurchase || null);
 }
 
 function renderRecentPurchases(periodPurchases) {
@@ -384,7 +618,9 @@ function renderRecentPurchases(periodPurchases) {
     const item = document.createElement("div");
     item.className = "activity-item";
     item.id = `recent-purchase-${p.id}`;
-    item.style.cursor = "default";
+    if (state.selectedPurchaseId === p.id) {
+      item.classList.add("active");
+    }
 
     const left = document.createElement("div");
     left.className = "card-left";
@@ -395,7 +631,9 @@ function renderRecentPurchases(periodPurchases) {
 
     const meta = document.createElement("div");
     meta.className = "card-meta";
-    meta.textContent = getDate(p.createdAt)?.toLocaleString("fr-FR") || "";
+    const itemsCount = getItemsForPurchase(p.id).length;
+    const dateLabel = getDate(p.createdAt)?.toLocaleString("fr-FR") || "";
+    meta.textContent = `${dateLabel} • ${itemsCount} ligne(s)`;
 
     left.appendChild(title);
     left.appendChild(meta);
@@ -406,6 +644,26 @@ function renderRecentPurchases(periodPurchases) {
 
     item.appendChild(left);
     item.appendChild(value);
+
+    item.addEventListener("click", () => {
+      const name =
+        sanitizeSupplierName(p.supplier || "") || "Fournisseur inconnu";
+      const nameKey = normalizeSupplierKey(name) || "__unknown__";
+      const row =
+        state.aggregates.find(a => a.nameKey === nameKey) ||
+        state.aggregates.find(a => a.purchases.some(x => x.id === p.id));
+      if (row) {
+        state.selected = row;
+        state.selectedPurchaseId = p.id;
+        renderSuppliersList();
+        renderDetail();
+        $("supplierDetailSection")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+    });
+
     fragment.appendChild(item);
   });
 
@@ -492,10 +750,14 @@ function renderRecommendations(periodPurchases) {
     }
   }
 
-  const { start: start30 } = getPeriodBounds("30d");
-  const last30 = state.purchases.filter(p => inPeriod(p.createdAt, start30, new Date()));
+  const { start: start30 } = getPeriodBounds("30days");
+  const last30 = state.purchases.filter(p =>
+    inPeriod(p.createdAt, start30, new Date())
+  );
   if (last30.length === 0 && state.purchases.length > 0) {
-    recos.push("Aucun achat sur les 30 derniers jours alors que l’historique existe — vérifier le stock.");
+    recos.push(
+      "Aucun achat sur les 30 derniers jours alors que l’historique existe — vérifier le stock."
+    );
   }
 
   const openDebts = getOpenSupplierDebtsTotal();
@@ -605,7 +867,18 @@ async function refreshAll() {
 function applyFilters() {
   state.period = $("periodFilter")?.value || "all";
   state.search = $("searchSupplier")?.value || "";
+
+  if (state.period === "custom") {
+    const from = $("dateFrom")?.value;
+    const to = $("dateTo")?.value;
+    if (!from || !to) {
+      setStatus("Choisissez une date début et une date fin pour le filtre personnalisé.");
+      return;
+    }
+  }
+
   buildAggregates();
+  setStatus("Filtres appliqués.");
 }
 
 function bindEvents() {
@@ -613,12 +886,21 @@ function bindEvents() {
     applyFilters();
   });
 
+  $("periodFilter")?.addEventListener("change", () => {
+    syncCustomDateInputs();
+  });
+
+  $("dateFrom")?.addEventListener("change", updateDateLimits);
+  $("dateTo")?.addEventListener("change", updateDateLimits);
+
   $("searchSupplier")?.addEventListener("keydown", e => {
     if (e.key === "Enter") {
       e.preventDefault();
       applyFilters();
     }
   });
+
+  syncCustomDateInputs();
 }
 
 onAuthStateChanged(auth, async user => {

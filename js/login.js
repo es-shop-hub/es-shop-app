@@ -13,6 +13,8 @@ import {
 
 import {
   isAllowedRole,
+  isPendingRole,
+  pendingRoleMessage,
   loadUserProfile,
   completeLogin,
   ensureFirestoreUser,
@@ -38,6 +40,12 @@ async function redirectAfterLogin(userData, action) {
   if (!userData?.isActive) {
     await signOut(auth);
     alert("Compte désactivé");
+    return;
+  }
+
+  if (isPendingRole(userData.role)) {
+    await signOut(auth);
+    alert(pendingRoleMessage());
     return;
   }
 

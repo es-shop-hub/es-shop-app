@@ -10,10 +10,21 @@ import {
 import { getAuth, signOut, onAuthStateChanged } from "./auth.js";
 
 const MAX_USERS = 5;
+const PENDING_ROLE_MESSAGE =
+  "Compte en attente de validation par un admin.";
 const auth = getAuth();
 
+/** Membres actifs métier uniquement (pas le rôle pending "user"). */
 export function isAllowedRole(role) {
   return role === "admin" || role === "seller";
+}
+
+export function isPendingRole(role) {
+  return role === "user";
+}
+
+export function pendingRoleMessage() {
+  return PENDING_ROLE_MESSAGE;
 }
 
 export function storeSession(uid, role) {
@@ -111,7 +122,8 @@ export async function ensureFirestoreUser(user, options = {}) {
 
   const batch = writeBatch(db);
 
-  const role = usersCount === 0 ? "admin" : "seller";
+  // 1er compte = admin ; suivants = user (pending jusqu'à promo admin→seller|admin)
+  const role = usersCount === 0 ? "admin" : "user";
 
   console.log("[auth-flow] batch.set users/", uid, { role });
   batch.set(doc(db, "users", uid), {

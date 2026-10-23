@@ -24,14 +24,15 @@ body{background:radial-gradient(circle at top,#1a1a1a,#0a0a0a 70%);color:#fff;mi
 .header p{color:#aaa;font-size:13px;line-height:1.5}
 .toolbar,.panel{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px;padding:14px;background:#151515;border-radius:14px;border:1px solid rgba(255,255,255,0.06)}
 .panel{flex-direction:column;align-items:stretch}
-.field{display:flex;flex-direction:column;gap:4px;min-width:140px;flex:1}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 140px}
 .field label{font-size:12px;color:#bbb}
-.field input,.field select{background:#111;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:8px 10px;font-size:13px}
+.field input,.field select{width:100%;max-width:100%;background:#111;color:#fff;border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:8px 10px;font-size:16px}
 button,.btn{background:#D4AF37;color:#111;border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer}
 button.secondary{background:#222;color:#D4AF37;border:1px solid rgba(212,175,55,0.4)}
 #statusMsg{min-height:18px;font-size:12px;color:#aaa;margin-bottom:12px}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
-.kpi-card{background:#151515;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
+.kpi-card{background:#151515;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px;min-width:0}
+.kpi-value{word-break:break-word}
 .kpi-label{font-size:11px;color:#aaa;margin-bottom:6px}
 .kpi-value{font-size:18px;font-weight:700;color:#ffd700}
 .section{margin-bottom:22px}
@@ -114,6 +115,10 @@ body.client-detail-popup-open #clientDetailModalClose{display:flex;align-items:c
   grid-template-columns:1fr 1fr;
   gap:12px;
 }
+header.header{min-width:0}
+header.header:has(#sfDrawerToggle){flex-wrap:wrap;align-items:flex-start}
+header.header h1{font-size:clamp(20px,5vw,26px);line-height:1.25;word-break:break-word}
+header.header p{max-width:100%}
 .top-card{
   background:#151515;
   border:1px solid rgba(255,255,255,0.06);
@@ -152,8 +157,26 @@ body.client-detail-popup-open #clientDetailModalClose{display:flex;align-items:c
   -webkit-tap-highlight-color:transparent;
 }
 #calcBtn:active{transform:scale(.95)}
-@media (max-width:340px){
+@media (max-width:900px){
   .clients-dual,.top-dual{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  body{padding:14px 12px 100px;overflow-x:hidden}
+  .toolbar{padding:12px;gap:8px;align-items:stretch}
+  .field{flex:1 1 100%;min-width:0}
+  .toolbar button{flex:1 1 auto;width:100%}
+  .kpi-row{grid-template-columns:1fr 1fr}
+  .panel{padding:12px;gap:10px}
+  .clients-dual{gap:14px}
+  .section-title h2{font-size:15px;line-height:1.35}
+  .section-title p{font-size:11px;line-height:1.45}
+  .row-actions{flex-direction:column}
+  .row-actions button{width:100%}
+  #catchupSaveBtn,#saveRewardBtn,#calcRewardBtn{width:100%}
+  #calcBtn{right:10px;top:auto;bottom:72px}
+}
+@media (max-width:400px){
+  .kpi-row{grid-template-columns:1fr}
 }
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-top:1px solid rgba(255,255,255,0.08);padding:8px;gap:4px;z-index:20}
 .nav-item{flex:1;text-align:center;text-decoration:none;color:#aaa;font-size:11px;padding:8px 4px}
@@ -180,9 +203,12 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#111;border-t
   <div class="field">
     <label for="periodFilter">Période</label>
     <select id="periodFilter">
-      <option value="month">Mois en cours</option>
-      <option value="30d">30 jours</option>
-      <option value="7d">7 jours</option>
+      <option value="today">Aujourd'hui</option>
+      <option value="yesterday">Hier</option>
+      <option value="7days">7 jours</option>
+      <option value="30days">30 jours</option>
+      <option value="month" selected>Ce mois</option>
+      <option value="year">Cette année</option>
       <option value="all">Tout</option>
     </select>
   </div>

@@ -21,6 +21,8 @@ import {
   ensureSystemMeta,
   completeLogin,
   isAllowedRole,
+  isPendingRole,
+  pendingRoleMessage,
   waitForAuthReady,
   authErrorMessage
 } from "./auth-flow.js";
@@ -68,7 +70,8 @@ bindFormAction(signupForm, async () => {
 
     const batch = writeBatch(db);
 
-    const role = usersCount === 0 ? "admin" : "seller";
+    // 1er compte = admin ; suivants = user (pending, pas seller auto)
+    const role = usersCount === 0 ? "admin" : "user";
 
     console.log("[signup] batch.set users/", uid, { role });
     batch.set(doc(db, "users", uid), {
@@ -95,7 +98,11 @@ bindFormAction(signupForm, async () => {
     });
 
     await signOut(auth);
-    alert("Compte créé ! Connectez-vous.");
+    if (role === "user") {
+      alert(`Compte créé. ${pendingRoleMessage()}`);
+    } else {
+      alert("Compte admin créé ! Connectez-vous.");
+    }
     window.location.replace("login.html");
   } catch (err) {
     console.error("[signup] erreur:", err?.code || err?.message, err);
@@ -118,6 +125,12 @@ bindActionButton(googleSignupBtn, async () => {
     if (!userData?.isActive) {
       await signOut(auth);
       alert("Compte désactivé");
+      return;
+    }
+
+    if (isPendingRole(userData.role)) {
+      await signOut(auth);
+      alert(pendingRoleMessage());
       return;
     }
 

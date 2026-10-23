@@ -195,6 +195,9 @@ function createBadge(role) {
 
   if (role === "admin") {
     span.classList.add("admin");
+  } else if (role === "user") {
+    span.classList.add("seller");
+    span.textContent = "user (attente)";
   } else {
     span.classList.add("seller");
   }
@@ -601,7 +604,11 @@ async function loadUsers() {
       const roleBtn = createButton("Changer rôle", "btn-action");  
       bindActionButton(roleBtn, async () => {
         try {
-          const nextRole = data.role === "admin" ? "seller" : "admin";
+          // user (pending) → seller ; admin ↔ seller
+          let nextRole = "seller";
+          if (data.role === "admin") nextRole = "seller";
+          else if (data.role === "seller") nextRole = "admin";
+          else if (data.role === "user") nextRole = "seller";
           await updateDoc(doc(db, "users", userId), {
             role: nextRole,
             updatedAt: serverTimestamp()

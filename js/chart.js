@@ -28,6 +28,7 @@ Chart.register(
 let statsChart = null;
 let isRendering = false;
 let gridBound = false;
+let zoomControlsBound = false;
 
 /** Une tuile = une courbe (style Search Console). */
 const SERIES_DEFS = [
@@ -283,6 +284,80 @@ function bindMetricGrid() {
       }
     });
   }
+
+  const zoomOutBtn = document.getElementById("chartZoomOutBtn");
+  if (zoomOutBtn && zoomOutBtn.dataset.zoomBound !== "1") {
+    zoomOutBtn.dataset.zoomBound = "1";
+    zoomOutBtn.addEventListener("click", () => {
+      if (!statsChart) return;
+      statsChart.zoom(0.8);
+    });
+  }
+
+  const zoomInBtn = document.getElementById("chartZoomInBtn");
+  if (zoomInBtn && zoomInBtn.dataset.zoomBound !== "1") {
+    zoomInBtn.dataset.zoomBound = "1";
+    zoomInBtn.addEventListener("click", () => {
+      if (!statsChart) return;
+      statsChart.zoom(1.2);
+    });
+  }
+}
+
+function ensureZoomControls() {
+  if (zoomControlsBound) return;
+  zoomControlsBound = true;
+
+  const canvas = document.getElementById("statsChart");
+  if (!canvas) return;
+
+  const host = canvas.parentElement;
+  if (!host) return;
+
+  const existing = host.querySelector(".chart-zoom-controls");
+  if (existing) return;
+
+  const controls = document.createElement("div");
+  controls.className = "chart-zoom-controls";
+  controls.style.display = "flex";
+  controls.style.alignItems = "center";
+  controls.style.justifyContent = "flex-end";
+  controls.style.gap = "8px";
+  controls.style.margin = "0 0 10px";
+
+  const zoomOut = document.createElement("button");
+  zoomOut.type = "button";
+  zoomOut.id = "chartZoomOutBtn";
+  zoomOut.textContent = "Dézoomer";
+  zoomOut.className = "chart-zoom-btn";
+  zoomOut.style.padding = "6px 12px";
+  zoomOut.style.borderRadius = "999px";
+  zoomOut.style.border = "1px solid rgba(0,0,0,0.12)";
+  zoomOut.style.background = "#f7f7f7";
+  zoomOut.style.cursor = "pointer";
+  zoomOut.addEventListener("click", () => {
+    if (!statsChart) return;
+    statsChart.zoom(0.8);
+  });
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.id = "chartResetZoomBtn";
+  reset.textContent = "Réinit. zoom";
+  reset.className = "chart-zoom-btn";
+  reset.style.padding = "6px 12px";
+  reset.style.borderRadius = "999px";
+  reset.style.border = "1px solid rgba(0,0,0,0.12)";
+  reset.style.background = "#f7f7f7";
+  reset.style.cursor = "pointer";
+  reset.addEventListener("click", () => {
+    if (statsChart?.resetZoom) {
+      statsChart.resetZoom();
+    }
+  });
+
+  controls.append(zoomOut, reset);
+  host.insertBefore(controls, canvas);
 }
 
 export function renderChart() {
@@ -291,6 +366,7 @@ export function renderChart() {
 
   try {
     bindMetricGrid();
+    ensureZoomControls();
 
     const canvas = document.getElementById("statsChart");
     if (!canvas) {

@@ -19,11 +19,13 @@
 
     main {
       max-width: 400px;
-      margin: 50px auto 40px;
+      width: calc(100% - 24px);
+      margin: 24px auto 40px;
       background: white;
       padding: 20px;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-sizing: border-box;
     }
 
     main h2 {
@@ -43,10 +45,12 @@
     form input[type="password"],
     form input[type="text"]#password {
       width: 100%;
-      padding: 10px;
+      max-width: 100%;
+      padding: 12px;
       border-radius: 8px;
       border: 1px solid #ccc;
-      font-size: 14px;
+      font-size: 16px;
+      box-sizing: border-box;
     }
 
     form input:focus {

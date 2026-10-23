@@ -16,8 +16,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Membres actifs métier uniquement (écritures isActiveMember)
     function validRole(role) {
       return role in ['admin', 'seller'];
+    }
+
+    // Inscription : admin (1er) | user (en attente jusqu'à promotion admin)
+    function validSignupRole(role) {
+      return role in ['admin', 'user'];
     }
 
     function metaDoc() {
@@ -63,19 +69,19 @@ service cloud.firestore {
         && !userExists(userId);
     }
 
-    // Signup : 1er compte = admin (usersCount == 0), suivants = seller.
-    // Rôles métier uniquement : admin | seller (pas de rôle inventé).
+    // Signup : 1er compte = admin ; suivants = user (pending, pas seller auto).
+    // Membres actifs = admin | seller (promotion manuelle par un admin).
     function validUserCreate() {
       return request.resource.data.userId == request.auth.uid
         && request.resource.data.keys().hasAll([
           'userId', 'name', 'role', 'isActive', 'createdAt'
         ])
-        && validRole(request.resource.data.role)
+        && validSignupRole(request.resource.data.role)
         && (
           (request.resource.data.role == 'admin'
             && (!metaExists() || metaDoc().data.usersCount == 0))
           ||
-          (request.resource.data.role == 'seller'
+          (request.resource.data.role == 'user'
             && metaExists()
             && metaDoc().data.usersCount > 0)
         )
@@ -85,7 +91,8 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 120;
     }
 
-    // Compte unique encore en role legacy "user" → auto-promotion admin
+    // Urgence : seul compte encore en role "user" → promo one-shot admin
+    // (premier admin bloqué). Si plusieurs users, pending reste bloqué.
     function canBootstrapSoleAdmin(userId) {
       return signedIn()
         && request.auth.uid == userId

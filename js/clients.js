@@ -38,7 +38,9 @@ const state = {
   filteredAggregates: [],
   totalPeriodProfit: 0,
   selected: null,
-  userId: null
+  userId: null,
+  currentPage: 1,
+  pageSize: 5
 };
 
 function setStatus(text) {
@@ -73,28 +75,66 @@ function currentMonthKey() {
 
 function getPeriodBounds(period) {
   const now = new Date();
-  const end = new Date(now);
+  let start = null;
+  let end = new Date(now);
   end.setHours(23, 59, 59, 999);
 
-  if (period === "all") {
-    return { start: null, end, label: "Toute la période" };
+  // Compat anciennes valeurs UI (7d / 30d)
+  const normalized =
+    period === "7d" ? "7days" : period === "30d" ? "30days" : period;
+
+  const labels = {
+    today: "Aujourd'hui",
+    yesterday: "Hier",
+    "7days": "7 derniers jours",
+    "30days": "30 derniers jours",
+    month: "Ce mois",
+    year: "Cette année",
+    all: "Toute la période"
+  };
+
+  switch (normalized) {
+    case "all":
+      break;
+    case "today":
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case "yesterday":
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        23,
+        59,
+        59,
+        999
+      );
+      break;
+    case "7days":
+      start = new Date(now.getTime() - 7 * 86400000);
+      start.setHours(0, 0, 0, 0);
+      break;
+    case "30days":
+      start = new Date(now.getTime() - 30 * 86400000);
+      start.setHours(0, 0, 0, 0);
+      break;
+    case "year":
+      start = new Date(now.getFullYear(), 0, 1);
+      start.setHours(0, 0, 0, 0);
+      break;
+    case "month":
+    default:
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      break;
   }
 
-  if (period === "7d") {
-    const start = new Date(now.getTime() - 7 * 86400000);
-    start.setHours(0, 0, 0, 0);
-    return { start, end, label: "7 derniers jours" };
-  }
-
-  if (period === "30d") {
-    const start = new Date(now.getTime() - 30 * 86400000);
-    start.setHours(0, 0, 0, 0);
-    return { start, end, label: "30 derniers jours" };
-  }
-
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  return { start, end, label: "Mois en cours" };
+  return {
+    start,
+    end,
+    label: labels[normalized] || labels.month
+  };
 }
 
 function saleInPeriod(sale, start, end) {
@@ -126,8 +166,8 @@ function firestoreErrorMessage(err, fallback = "Erreur") {
 }
 
 /**
- * Compte unique encore en role legacy "user" → admin
- * (débloquer Clients / écritures isActiveMember).
+ * Urgence one-shot : seul compte encore role "user" → admin.
+ * Si plusieurs users existent, le pending reste bloqué (pas d'auto-promo).
  */
 async function bootstrapSoleAdminIfNeeded(uid, data) {
   if (!data || data.role === "admin" || data.role === "seller") {
@@ -151,7 +191,7 @@ async function bootstrapSoleAdminIfNeeded(uid, data) {
   } catch (err) {
     console.error("[clients] bootstrap admin:", err);
     throw new Error(
-      "Compte bloqué (rôle legacy « user »). Déployez les règles Firestore à jour, ou définissez role=admin dans la Console Firebase."
+      "Compte bloqué. Déployez les règles Firestore à jour, ou définissez role=admin dans la Console Firebase."
     );
   }
 }
@@ -163,6 +203,10 @@ async function checkUser(uid) {
   if (!data?.isActive) throw new Error("Compte désactivé");
 
   data = await bootstrapSoleAdminIfNeeded(uid, data);
+
+  if (data.role === "user") {
+    throw new Error("Compte en attente de validation par un admin.");
+  }
 
   if (data.role !== "admin" && data.role !== "seller") {
     throw new Error(
@@ -287,16 +331,15 @@ function buildAggregates() {
     }
   });
 
-  const totalSalesCount = periodSales.filter(s =>
-    normalizeClientNameKey(sanitizeClientName(s.clientName || ""))
-  ).length;
+  const totalPeriodCa = periodSales.reduce(
+    (sum, sale) => sum + (Number(sale.total_amount) || 0),
+    0
+  );
 
   state.aggregates = [...byKey.values()]
     .map(row => {
       const salesSharePct =
-        totalSalesCount > 0
-          ? round2((100 * row.salesCount) / totalSalesCount)
-          : 0;
+        totalPeriodCa > 0 ? round2((100 * row.ca) / totalPeriodCa) : 0;
       return {
         ...row,
         isRecurring: row.salesCount >= 2,
@@ -306,12 +349,21 @@ function buildAggregates() {
     })
     .sort((a, b) => {
       if (a.isRecurring !== b.isRecurring) return a.isRecurring ? -1 : 1;
-      return b.ca - a.ca;
+
+      const caDiff = b.ca - a.ca;
+      if (Math.abs(caDiff) > 0.0001) return caDiff;
+
+      const profitDiff = b.profit - a.profit;
+      if (Math.abs(profitDiff) > 0.0001) return profitDiff;
+
+      return b.salesCount - a.salesCount;
     });
 
   state.filteredAggregates = state.aggregates.filter(a =>
     matchesNameFilter(a, nameTerm)
   );
+
+  state.currentPage = 1;
 
   const view = state.filteredAggregates;
   const recurring = view.filter(a => a.isRecurring).length;
@@ -394,17 +446,28 @@ function renderTopClients() {
   const withSales = state.filteredAggregates.filter(a => a.salesCount > 0);
 
   const byShare = [...withSales]
-    .sort((a, b) => b.salesSharePct - a.salesSharePct || b.ca - a.ca)
+    .sort((a, b) => {
+      if (b.salesSharePct !== a.salesSharePct) return b.salesSharePct - a.salesSharePct;
+      const caDiff = b.ca - a.ca;
+      if (Math.abs(caDiff) > 0.0001) return caDiff;
+      return b.profit - a.profit;
+    })
     .slice(0, 5);
 
   const byProfit = [...withSales]
-    .sort((a, b) => b.profit - a.profit || b.ca - a.ca)
+    .sort((a, b) => {
+      const profitDiff = b.profit - a.profit;
+      if (Math.abs(profitDiff) > 0.0001) return profitDiff;
+      const caDiff = b.ca - a.ca;
+      if (Math.abs(caDiff) > 0.0001) return caDiff;
+      return b.salesCount - a.salesCount;
+    })
     .slice(0, 5);
 
   fillTopList(
     "topBySalesShare",
     byShare,
-    row => `${row.salesSharePct}% · ${row.salesCount} v.`
+    row => `${row.salesSharePct}% · ${formatMoney(row.ca)}`
   );
   fillTopList(
     "topByProfit",
@@ -485,8 +548,16 @@ function renderClientsList() {
     return;
   }
 
+  const totalPages = Math.max(1, Math.ceil(withSales.length / state.pageSize));
+  if (state.currentPage > totalPages) {
+    state.currentPage = totalPages;
+  }
+
+  const startIndex = (state.currentPage - 1) * state.pageSize;
+  const pageRows = withSales.slice(startIndex, startIndex + state.pageSize);
+
   const frag = document.createDocumentFragment();
-  withSales.forEach(row => {
+  pageRows.forEach(row => {
     const card = document.createElement("div");
     card.className = "client-card";
     card.id = `clientCard_${row.nameKey}`;
@@ -564,6 +635,34 @@ function renderClientsList() {
   });
 
   box.appendChild(frag);
+
+  if (totalPages > 1) {
+    const pager = document.createElement("div");
+    pager.className = "pagination";
+    pager.style.display = "flex";
+    pager.style.justifyContent = "center";
+    pager.style.gap = "8px";
+    pager.style.marginTop = "12px";
+
+    for (let page = 1; page <= totalPages; page += 1) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = String(page);
+      btn.style.border = "1px solid rgba(218, 165, 32, 0.7)";
+      btn.style.borderRadius = "999px";
+      btn.style.padding = "6px 10px";
+      btn.style.background = page === state.currentPage ? "#d4a31f" : "transparent";
+      btn.style.color = page === state.currentPage ? "#111" : "#f0f0f0";
+      btn.style.cursor = "pointer";
+      btn.addEventListener("click", () => {
+        state.currentPage = page;
+        renderClientsList();
+      });
+      pager.appendChild(btn);
+    }
+
+    box.appendChild(pager);
+  }
 }
 
 function selectClient(row, options = {}) {
