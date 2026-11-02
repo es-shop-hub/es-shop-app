@@ -60,6 +60,19 @@ export function formatDate(ts) {
   });
 }
 
+/** Labels FR pour batch_movements.reason */
+export function formatBatchReason(reason) {
+  const key = String(reason || "sale").toLowerCase();
+  const map = {
+    sale: "Vente",
+    sample: "Échantillon",
+    promo: "Promotion",
+    loss: "Perte",
+    perte: "Perte"
+  };
+  return map[key] || String(reason || "Vente");
+}
+
 export function showToast(message, type = "info") {
   const el = document.getElementById("toast");
   if (!el) return;

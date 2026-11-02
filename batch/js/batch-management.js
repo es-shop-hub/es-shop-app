@@ -32,11 +32,25 @@ let productsMap = {};
 let editingProductId = null;
 let editingBatchId = null;
 
+let selectedProductId = null;
+let selectedSaleBatchId = null;
+let showDepleted = false;
+
 const els = {
   productsList: document.getElementById("productsList"),
   batchesList: document.getElementById("batchesList"),
-  productSelect: document.getElementById("batchProductSelect"),
-  saleBatchSelect: document.getElementById("saleBatchSelect"),
+  batchListSearch: document.getElementById("batchListSearch"),
+  showDepletedBtn: document.getElementById("showDepletedBtn"),
+  batchProductSearch: document.getElementById("batchProductSearch"),
+  batchProductList: document.getElementById("batchProductList"),
+  batchProductSelectedLabel: document.getElementById("batchProductSelectedLabel"),
+  batchProductClearBtn: document.getElementById("batchProductClearBtn"),
+  createBatchBtn: document.getElementById("createBatchBtn"),
+  saleBatchSearch: document.getElementById("saleBatchSearch"),
+  saleBatchList: document.getElementById("saleBatchList"),
+  saleBatchSelectedLabel: document.getElementById("saleBatchSelectedLabel"),
+  saleBatchClearBtn: document.getElementById("saleBatchClearBtn"),
+  recordSaleBtn: document.getElementById("recordSaleBtn"),
   productName: document.getElementById("productName"),
   productNote: document.getElementById("productNote"),
   batchQty: document.getElementById("batchQty"),
@@ -56,7 +70,8 @@ const els = {
 function blockAccess() {
   document.body.replaceChildren();
   const div = document.createElement("div");
-  div.style.cssText = "display:flex;height:100vh;align-items:center;justify-content:center;background:#111;color:#fff;font-size:18px;";
+  div.style.cssText =
+    "display:flex;height:100vh;align-items:center;justify-content:center;background:#111;color:#fff;font-size:18px;";
   div.textContent = "⛔ Accès refusé — connectez-vous.";
   document.body.appendChild(div);
 }
@@ -68,40 +83,234 @@ function rebuildProductsMap() {
   });
 }
 
-function createOption(value, label, disabled = false) {
-  const opt = document.createElement("option");
-  opt.value = value;
-  opt.textContent = label;
-  opt.disabled = disabled;
-  return opt;
+function normalizeSearch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 }
 
-function fillProductSelects() {
-  if (els.productSelect) {
-    els.productSelect.replaceChildren();
-    els.productSelect.appendChild(createOption("", "— Choisir un produit —", true));
+function isDepletedBatch(batch) {
+  return (
+    batch.status === "depleted" ||
+    Number(batch.quantity_remaining) <= 0
+  );
+}
 
-    products
-      .filter(p => p.isActive !== false)
-      .forEach(p => {
-        els.productSelect.appendChild(createOption(p.id, p.name));
-      });
+function getActiveProducts() {
+  return products.filter(p => p.isActive !== false);
+}
+
+function getSellableBatches() {
+  return batches.filter(
+    b => b.status === "active" && Number(b.quantity_remaining) > 0
+  );
+}
+
+function syncActionButtons() {
+  if (els.createBatchBtn) {
+    els.createBatchBtn.disabled = !selectedProductId;
+  }
+  if (els.recordSaleBtn) {
+    els.recordSaleBtn.disabled = !selectedSaleBatchId;
   }
 }
 
-function fillSaleBatchSelect() {
-  if (!els.saleBatchSelect) return;
+function setProductSelection(productId) {
+  selectedProductId = productId || null;
+  const product = selectedProductId
+    ? productsMap[selectedProductId]
+    : null;
 
-  els.saleBatchSelect.replaceChildren();
-  els.saleBatchSelect.appendChild(createOption("", "— Choisir un lot —", true));
+  if (els.batchProductSelectedLabel) {
+    els.batchProductSelectedLabel.textContent = product
+      ? product.name || selectedProductId
+      : "Aucun";
+    els.batchProductSelectedLabel.classList.toggle("is-empty", !product);
+  }
+  if (els.batchProductClearBtn) {
+    els.batchProductClearBtn.hidden = !product;
+  }
+  if (els.batchProductSearch && product) {
+    els.batchProductSearch.value = "";
+  }
+  syncActionButtons();
+  renderProductPickerList();
+}
 
-  batches
-    .filter(b => b.status === "active" && b.quantity_remaining > 0)
-    .forEach(b => {
-      const name = productsMap[b.productId]?.name || b.productId;
-      const label = `${name} — reste ${b.quantity_remaining} (coût/u ${formatMoney(b.cost_unit_avg)})`;
-      els.saleBatchSelect.appendChild(createOption(b.id, label));
+function setSaleBatchSelection(batchId) {
+  selectedSaleBatchId = batchId || null;
+  const batch = selectedSaleBatchId
+    ? batches.find(b => b.id === selectedSaleBatchId)
+    : null;
+  const name = batch
+    ? productsMap[batch.productId]?.name || batch.productId
+    : null;
+
+  if (els.saleBatchSelectedLabel) {
+    els.saleBatchSelectedLabel.textContent = batch
+      ? `${name} — reste ${batch.quantity_remaining}`
+      : "Aucun";
+    els.saleBatchSelectedLabel.classList.toggle("is-empty", !batch);
+  }
+  if (els.saleBatchClearBtn) {
+    els.saleBatchClearBtn.hidden = !batch;
+  }
+  if (els.saleBatchSearch && batch) {
+    els.saleBatchSearch.value = "";
+  }
+  syncActionButtons();
+  renderSaleBatchPickerList();
+}
+
+function renderProductPickerList() {
+  const box = els.batchProductList;
+  if (!box) return;
+  box.replaceChildren();
+
+  const term = normalizeSearch(els.batchProductSearch?.value || "");
+  let list = getActiveProducts();
+
+  if (term) {
+    list = list.filter(p => {
+      const hay = normalizeSearch(`${p.name || ""} ${p.note || ""} ${p.id}`);
+      return hay.includes(term);
     });
+  }
+
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "picker-empty";
+    empty.textContent = term
+      ? "Aucun produit trouvé."
+      : "Aucun produit actif.";
+    box.appendChild(empty);
+    return;
+  }
+
+  list.forEach(product => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "picker-item";
+    btn.setAttribute("role", "option");
+    if (product.id === selectedProductId) {
+      btn.classList.add("is-active");
+    }
+
+    const title = document.createElement("span");
+    title.textContent = product.name || product.id;
+    btn.appendChild(title);
+
+    if (product.note) {
+      const sub = document.createElement("span");
+      sub.className = "picker-item-sub";
+      sub.textContent = product.note;
+      btn.appendChild(sub);
+    }
+
+    btn.addEventListener("click", () => {
+      setProductSelection(product.id);
+    });
+    box.appendChild(btn);
+  });
+}
+
+function renderSaleBatchPickerList() {
+  const box = els.saleBatchList;
+  if (!box) return;
+  box.replaceChildren();
+
+  const term = normalizeSearch(els.saleBatchSearch?.value || "");
+  let list = getSellableBatches();
+
+  if (term) {
+    list = list.filter(b => {
+      const name = productsMap[b.productId]?.name || "";
+      const hay = normalizeSearch(`${name} ${b.id} ${b.productId}`);
+      return hay.includes(term);
+    });
+  }
+
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "picker-empty";
+    empty.textContent = term
+      ? "Aucun lot trouvé."
+      : "Aucun lot actif avec stock.";
+    box.appendChild(empty);
+    return;
+  }
+
+  list.forEach(batch => {
+    const name = productsMap[batch.productId]?.name || batch.productId;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "picker-item";
+    btn.setAttribute("role", "option");
+    if (batch.id === selectedSaleBatchId) {
+      btn.classList.add("is-active");
+    }
+
+    const title = document.createElement("span");
+    title.textContent = `${name} — Lot ${batch.id.slice(0, 8)}…`;
+    btn.appendChild(title);
+
+    const sub = document.createElement("span");
+    sub.className = "picker-item-sub";
+    sub.textContent = `Reste ${batch.quantity_remaining} • coût/u ${formatMoney(batch.cost_unit_avg)}`;
+    btn.appendChild(sub);
+
+    btn.addEventListener("click", () => {
+      setSaleBatchSelection(batch.id);
+    });
+    box.appendChild(btn);
+  });
+}
+
+function refreshPickers() {
+  if (
+    selectedProductId &&
+    !getActiveProducts().some(p => p.id === selectedProductId)
+  ) {
+    selectedProductId = null;
+  }
+  if (
+    selectedSaleBatchId &&
+    !getSellableBatches().some(b => b.id === selectedSaleBatchId)
+  ) {
+    selectedSaleBatchId = null;
+  }
+  setProductSelection(selectedProductId);
+  setSaleBatchSelection(selectedSaleBatchId);
+}
+
+function batchMatchesListSearch(batch, term) {
+  if (!term) return true;
+  const name = productsMap[batch.productId]?.name || "";
+  const hay = normalizeSearch(`${name} ${batch.id} ${batch.productId}`);
+  return hay.includes(term);
+}
+
+function getVisibleBatchesForList() {
+  const term = normalizeSearch(els.batchListSearch?.value || "");
+  return batches.filter(batch => {
+    const depleted = isDepletedBatch(batch);
+    const matches = batchMatchesListSearch(batch, term);
+
+    if (!matches) return false;
+    if (!depleted) return true;
+    if (showDepleted) return true;
+    if (term) return true;
+    return false;
+  });
+}
+
+function syncDepletedButton() {
+  if (!els.showDepletedBtn) return;
+  els.showDepletedBtn.textContent = showDepleted
+    ? "Masquer lots épuisés"
+    : "Afficher lots épuisés";
 }
 
 function renderProducts() {
@@ -150,7 +359,8 @@ function renderProducts() {
     const toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
     toggleBtn.className = "btn btn-warning btn-sm";
-    toggleBtn.textContent = product.isActive === false ? "Activer" : "Désactiver";
+    toggleBtn.textContent =
+      product.isActive === false ? "Activer" : "Désactiver";
     bindActionButton(toggleBtn, () => handleToggleProduct(product));
 
     const deleteBtn = document.createElement("button");
@@ -169,6 +379,8 @@ function renderBatches() {
   if (!els.batchesList) return;
   els.batchesList.replaceChildren();
 
+  const visible = getVisibleBatchesForList();
+
   if (!batches.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
@@ -177,7 +389,17 @@ function renderBatches() {
     return;
   }
 
-  batches.forEach(batch => {
+  if (!visible.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = showDepleted
+      ? "Aucun lot pour cette recherche."
+      : "Aucun lot actif. Activez « Afficher lots épuisés » ou cherchez un lot.";
+    els.batchesList.appendChild(empty);
+    return;
+  }
+
+  visible.forEach(batch => {
     const row = document.createElement("div");
     row.className = "item-row";
 
@@ -244,10 +466,10 @@ async function refreshAll() {
     products = await loadBatchProducts();
     batches = await loadBatches();
     rebuildProductsMap();
-    fillProductSelects();
-    fillSaleBatchSelect();
     renderProducts();
     renderBatches();
+    refreshPickers();
+    syncDepletedButton();
     setStatus("● Online");
   } catch (err) {
     console.error(err);
@@ -266,8 +488,12 @@ function openEditProductModal(product) {
 
 function openEditBatchModal(batch) {
   editingBatchId = batch.id;
-  if (els.editBatchQty) els.editBatchQty.value = String(batch.quantity_initial || "");
-  if (els.editBatchCost) els.editBatchCost.value = String(batch.cost_total || "");
+  if (els.editBatchQty) {
+    els.editBatchQty.value = String(batch.quantity_initial || "");
+  }
+  if (els.editBatchCost) {
+    els.editBatchCost.value = String(batch.cost_total || "");
+  }
   if (els.editBatchError) els.editBatchError.textContent = "";
   openModal("editBatchModal");
 }
@@ -325,7 +551,13 @@ async function handleToggleProduct(product) {
 }
 
 async function handleDeleteProduct(product) {
-  if (!window.confirm(`Supprimer « ${product.name} » ? Cette action est définitive.`)) return;
+  if (
+    !window.confirm(
+      `Supprimer « ${product.name} » ? Cette action est définitive.`
+    )
+  ) {
+    return;
+  }
 
   try {
     await deleteBatchProduct(product.id);
@@ -337,10 +569,15 @@ async function handleDeleteProduct(product) {
 }
 
 async function handleCreateBatch() {
+  if (!selectedProductId) {
+    showToast("Choisissez un produit (pas « Aucun »).", "error");
+    return;
+  }
+
   try {
     await createBatch(
       {
-        productId: els.productSelect?.value,
+        productId: selectedProductId,
         quantityInitial: els.batchQty?.value,
         costTotal: els.batchCost?.value
       },
@@ -348,6 +585,7 @@ async function handleCreateBatch() {
     );
     if (els.batchQty) els.batchQty.value = "";
     if (els.batchCost) els.batchCost.value = "";
+    setProductSelection(null);
     showToast("Lot créé.", "success");
     await refreshAll();
   } catch (err) {
@@ -379,7 +617,13 @@ async function handleSaveBatchEdit() {
 }
 
 async function handleCancelBatch(batch) {
-  if (!window.confirm("Désactiver ce lot ? Aucune vente ne pourra être enregistrée dessus.")) return;
+  if (
+    !window.confirm(
+      "Désactiver ce lot ? Aucune vente ne pourra être enregistrée dessus."
+    )
+  ) {
+    return;
+  }
 
   try {
     await cancelBatch(batch.id, currentUserId);
@@ -391,7 +635,13 @@ async function handleCancelBatch(batch) {
 }
 
 async function handleDeleteBatch(batch) {
-  if (!window.confirm("Supprimer ce lot ? Uniquement possible sans ventes enregistrées.")) return;
+  if (
+    !window.confirm(
+      "Supprimer ce lot ? Uniquement possible sans ventes enregistrées."
+    )
+  ) {
+    return;
+  }
 
   try {
     await deleteBatch(batch.id);
@@ -403,6 +653,11 @@ async function handleDeleteBatch(batch) {
 }
 
 async function handleRecordSale() {
+  if (!selectedSaleBatchId) {
+    showToast("Choisissez un lot (pas « Aucun »).", "error");
+    return;
+  }
+
   try {
     const clientName = (els.saleClientName?.value || "").trim();
     if (!clientName) {
@@ -410,7 +665,7 @@ async function handleRecordSale() {
     }
     await recordBatchSale(
       {
-        batchId: els.saleBatchSelect?.value,
+        batchId: selectedSaleBatchId,
         quantityOut: els.saleQty?.value,
         amountCollected: els.saleAmount?.value,
         reason: els.saleReason?.value || "sale",
@@ -426,6 +681,7 @@ async function handleRecordSale() {
     if (els.saleQty) els.saleQty.value = "";
     if (els.saleAmount) els.saleAmount.value = "";
     if (els.saleClientName) els.saleClientName.value = "";
+    setSaleBatchSelection(null);
     showToast("Vente enregistrée.", "success");
     await refreshAll();
   } catch (err) {
@@ -435,16 +691,22 @@ async function handleRecordSale() {
 
 function bindEvents() {
   bindActionButton(document.getElementById("createProductBtn"), handleCreateProduct);
-  bindActionButton(document.getElementById("createBatchBtn"), handleCreateBatch);
-  bindActionButton(document.getElementById("recordSaleBtn"), handleRecordSale);
+  bindActionButton(els.createBatchBtn, handleCreateBatch);
+  bindActionButton(els.recordSaleBtn, handleRecordSale);
 
-  bindActionButton(document.getElementById("editProductSaveBtn"), handleSaveProductEdit);
+  bindActionButton(
+    document.getElementById("editProductSaveBtn"),
+    handleSaveProductEdit
+  );
   document.getElementById("editProductCancelBtn")?.addEventListener("click", () => {
     closeModal("editProductModal");
     editingProductId = null;
   });
 
-  bindActionButton(document.getElementById("editBatchSaveBtn"), handleSaveBatchEdit);
+  bindActionButton(
+    document.getElementById("editBatchSaveBtn"),
+    handleSaveBatchEdit
+  );
   document.getElementById("editBatchCancelBtn")?.addEventListener("click", () => {
     closeModal("editBatchModal");
     editingBatchId = null;
@@ -454,6 +716,29 @@ function bindEvents() {
     document.getElementById(id)?.addEventListener("click", e => {
       if (e.target.id === id) closeModal(id);
     });
+  });
+
+  els.batchProductSearch?.addEventListener("input", () => {
+    renderProductPickerList();
+  });
+  els.batchProductClearBtn?.addEventListener("click", () => {
+    setProductSelection(null);
+  });
+
+  els.saleBatchSearch?.addEventListener("input", () => {
+    renderSaleBatchPickerList();
+  });
+  els.saleBatchClearBtn?.addEventListener("click", () => {
+    setSaleBatchSelection(null);
+  });
+
+  els.batchListSearch?.addEventListener("input", () => {
+    renderBatches();
+  });
+  els.showDepletedBtn?.addEventListener("click", () => {
+    showDepleted = !showDepleted;
+    syncDepletedButton();
+    renderBatches();
   });
 }
 

@@ -86,9 +86,14 @@ form-action 'self';
     <div class="section-title">Nouveau lot</div>
     <div class="section-sub">Entrée stock avec coût total — marge calculée à la vente</div>
     <div class="form-grid">
-      <div class="full">
-        <label for="batchProductSelect">Produit</label>
-        <select id="batchProductSelect"></select>
+      <div class="full picker-block" id="batchProductPicker">
+        <label for="batchProductSearch">Produit</label>
+        <div class="picker-selected" id="batchProductSelected">
+          <span class="picker-selected-label" id="batchProductSelectedLabel">Aucun</span>
+          <button type="button" class="btn btn-muted btn-sm" id="batchProductClearBtn" hidden>Changer</button>
+        </div>
+        <input type="search" id="batchProductSearch" maxlength="80" placeholder="Rechercher un produit…" autocomplete="off">
+        <div class="picker-list" id="batchProductList" role="listbox" aria-label="Produits disponibles"></div>
       </div>
       <div>
         <label for="batchQty">Quantité initiale</label>
@@ -99,16 +104,21 @@ form-action 'self';
         <input type="number" id="batchCost" min="0.01" step="0.01" placeholder="500.00">
       </div>
     </div>
-    <button type="button" class="btn btn-primary" id="createBatchBtn">Enregistrer le lot</button>
+    <button type="button" class="btn btn-primary" id="createBatchBtn" disabled>Enregistrer le lot</button>
   </section>
 
   <section class="section" id="saleSection">
     <div class="section-title">Vente fractionnée</div>
     <div class="section-sub">Décrémente le lot et enregistre la marge (transaction Firestore)</div>
     <div class="form-grid">
-      <div class="full">
-        <label for="saleBatchSelect">Lot actif</label>
-        <select id="saleBatchSelect"></select>
+      <div class="full picker-block" id="saleBatchPicker">
+        <label for="saleBatchSearch">Lot actif</label>
+        <div class="picker-selected" id="saleBatchSelected">
+          <span class="picker-selected-label" id="saleBatchSelectedLabel">Aucun</span>
+          <button type="button" class="btn btn-muted btn-sm" id="saleBatchClearBtn" hidden>Changer</button>
+        </div>
+        <input type="search" id="saleBatchSearch" maxlength="80" placeholder="Rechercher un lot…" autocomplete="off">
+        <div class="picker-list" id="saleBatchList" role="listbox" aria-label="Lots actifs"></div>
       </div>
       <div>
         <label for="saleQty">Quantité vendue</label>
@@ -128,14 +138,20 @@ form-action 'self';
           <option value="sale">Vente</option>
           <option value="sample">Échantillon</option>
           <option value="promo">Promotion</option>
+          <option value="loss">Perte</option>
         </select>
       </div>
     </div>
-    <button type="button" class="btn btn-primary" id="recordSaleBtn">Enregistrer la vente</button>
+    <button type="button" class="btn btn-primary" id="recordSaleBtn" disabled>Enregistrer la vente</button>
   </section>
 
   <section class="section" id="batchesSection">
     <div class="section-title">Lots enregistrés</div>
+    <div class="section-sub">Les lots épuisés sont masqués par défaut</div>
+    <div class="batches-toolbar" id="batchesToolbar">
+      <input type="search" id="batchListSearch" maxlength="80" placeholder="Rechercher un lot / produit…" autocomplete="off">
+      <button type="button" class="btn btn-muted btn-sm" id="showDepletedBtn">Afficher lots épuisés</button>
+    </div>
     <div id="batchesList"></div>
   </section>
 

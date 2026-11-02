@@ -109,6 +109,67 @@ background:#fff;
 border-radius:12px;
 padding:14px;
 box-shadow:0 3px 8px rgba(0,0,0,.08);
+position:relative;
+overflow:hidden;
+}
+
+.sale-card.has-cancel-rail{
+padding-right:36px;
+}
+
+.sale-card.is-cancel-open{
+padding-right:168px;
+}
+
+.sale-cancel-rail{
+position:absolute;
+top:0;
+right:0;
+bottom:0;
+display:flex;
+flex-direction:row-reverse;
+align-items:stretch;
+}
+
+.sale-cancel-toggle{
+appearance:none;
+flex:0 0 28px;
+width:28px;
+border:none;
+border-left:1px solid #eee;
+background:#F7F7F7;
+color:#0B3D2E;
+font-size:18px;
+font-weight:700;
+cursor:pointer;
+line-height:1;
+}
+
+.sale-cancel-toggle:hover{
+background:#EEF2F0;
+}
+
+.sale-cancel-panel{
+width:0;
+overflow:hidden;
+display:flex;
+align-items:center;
+justify-content:center;
+background:#FFF5F5;
+border-left:0 solid #FECACA;
+transition:width .18s ease, border-left-width .18s ease;
+}
+
+.sale-card.is-cancel-open .sale-cancel-panel{
+width:140px;
+border-left-width:1px;
+}
+
+.sale-cancel-panel .btn-cancel-sale{
+white-space:normal;
+text-align:center;
+margin:0 8px;
+max-width:124px;
 }
 
 .sale-top{
@@ -153,6 +214,21 @@ color:#C17D00;
 }
 
 .badge-cancelled{
+background:#FDE8E8;
+color:#B42318;
+}
+
+.badge-batch{
+background:#E8F1FF;
+color:#1565C0;
+}
+
+.badge-classic{
+background:#F3E8FF;
+color:#6A1B9A;
+}
+
+.badge-loss{
 background:#FDE8E8;
 color:#B42318;
 }
@@ -293,6 +369,14 @@ color:#D4AF37;
 <option value="">Toutes</option>
 <option value="active">Active</option>
 <option value="cancelled">Annulée</option>
+</select>
+</div>
+<div class="filter-group">
+<label class="filter-label" for="typeFilter">Type</label>
+<select id="typeFilter">
+<option value="all" selected>Tous (classique + lots)</option>
+<option value="classic">Classique</option>
+<option value="batch">Lots</option>
 </select>
 </div>
 <div class="filter-actions">

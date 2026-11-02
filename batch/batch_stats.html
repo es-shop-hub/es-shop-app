@@ -33,46 +33,75 @@ form-action 'self';
     <a class="cross-link" href="batch_management.html">📦 Gestion lots</a>
   </div>
 
-  <div class="filter-row">
+  <div class="filter-row" id="batchStatsFilters">
     <div>
-      <label for="filterProduct">Filtrer par produit</label>
-      <select id="filterProduct"></select>
+      <label for="statsRange">Période</label>
+      <select id="statsRange">
+        <option value="today">Aujourd'hui</option>
+        <option value="yesterday">Hier</option>
+        <option value="7days">7 jours</option>
+        <option value="30days" selected>30 jours</option>
+        <option value="month">Ce mois</option>
+        <option value="year">Cette année</option>
+        <option value="custom">Personnalisé</option>
+      </select>
     </div>
-    <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
-      <button type="button" class="btn btn-primary" id="applyFilterBtn" style="margin-top:0;">Actualiser</button>
-      <button type="button" class="btn btn-primary" id="pdfBtn" style="margin-top:0;">Rapport PDF</button>
+    <div>
+      <label for="dateFrom">Date début</label>
+      <input type="date" id="dateFrom" disabled>
+    </div>
+    <div>
+      <label for="dateTo">Date fin</label>
+      <input type="date" id="dateTo" disabled>
+    </div>
+    <div>
+      <label for="filterProduct">Produit</label>
+      <select id="filterProduct"></select>
     </div>
   </div>
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
+  <div class="filter-actions" id="filterActions">
+    <button type="button" class="btn btn-primary" id="applyFilterBtn">Appliquer filtres</button>
+    <button type="button" class="btn btn-muted" id="refreshBtn">Actualiser</button>
+    <button type="button" class="btn btn-primary" id="pdfBtn">Rapport PDF</button>
+  </div>
+
+  <div class="kpi-grid" id="batchKpiGrid">
+    <div class="kpi-card kpi-card--accent">
       <div class="kpi-label">Montant encaissé</div>
+      <div class="kpi-hint">Période</div>
       <div class="kpi-value" id="kpiCollected">0,00</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Coût consommé</div>
+      <div class="kpi-hint">Période</div>
       <div class="kpi-value" id="kpiCostConsumed">0,00</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Capital engagé (stock)</div>
+    <div class="kpi-card kpi-card--muted">
+      <div class="kpi-label">Capital engagé</div>
+      <div class="kpi-hint">Stock actuel</div>
       <div class="kpi-value" id="kpiCostEngaged">0,00</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Bénéfice affiché</div>
+    <div class="kpi-card kpi-card--accent">
+      <div class="kpi-label">Marge période</div>
+      <div class="kpi-hint">Σ profit réel</div>
       <div class="kpi-value" id="kpiBenefitDisplay">0,00</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Quantité vendue</div>
+      <div class="kpi-hint">Période</div>
       <div class="kpi-value" id="kpiQtyOut">0</div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Stock restant (lots actifs)</div>
+    <div class="kpi-card kpi-card--muted">
+      <div class="kpi-label">Stock restant</div>
+      <div class="kpi-hint">Lots actifs</div>
       <div class="kpi-value" id="kpiStock">0</div>
     </div>
   </div>
 
   <section class="section">
     <div class="section-title">Performance par produit</div>
+    <div class="section-sub">Stock = actuel · Qté / Marge = période filtrée</div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -81,7 +110,7 @@ form-action 'self';
             <th>Lots</th>
             <th>Stock restant</th>
             <th>Qté vendue</th>
-            <th>Marge</th>
+            <th>Marge période</th>
           </tr>
         </thead>
         <tbody id="productTableBody"></tbody>
@@ -91,16 +120,17 @@ form-action 'self';
 
   <section class="section">
     <div class="section-title">Performance par lot</div>
+    <div class="section-sub">Reste = stock actuel · Encaissé / Marge = période filtrée</div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Produit</th>
             <th>Statut</th>
-            <th>Stock</th>
+            <th>Reste</th>
             <th>Qté vendue</th>
             <th>Encaissé</th>
-            <th>Bénéfice</th>
+            <th>Marge période</th>
             <th>Lot</th>
           </tr>
         </thead>
@@ -111,8 +141,13 @@ form-action 'self';
 
   <section class="section">
     <div class="section-title">Mouvements récents</div>
-    <div class="section-sub">50 derniers enregistrements — immuables (comme stock_movements)</div>
+    <div class="section-sub" id="movementsSectionSub">20 par page — immuables</div>
     <div id="movementsList"></div>
+    <div class="movements-pager" id="movementsPager" hidden>
+      <button type="button" class="btn btn-muted btn-sm" id="movementsPrevBtn">Précédent</button>
+      <span class="movements-pager-info" id="movementsPagerInfo">Page 1 / 1</span>
+      <button type="button" class="btn btn-muted btn-sm" id="movementsNextBtn">Suivant</button>
+    </div>
   </section>
 
 </div>

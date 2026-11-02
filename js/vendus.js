@@ -21,6 +21,10 @@ import {
   upsertClientByName
 } from "./clients-service.js";
 import { bindActionButton } from "./utils/buttonManager.js";
+import {
+  BATCH_COLLECTIONS,
+  formatBatchReason
+} from "../batch/js/batch-utils.js";
 
 const $ = id => document.getElementById(id);
 
@@ -29,6 +33,8 @@ const CANCEL_WINDOW_MS = 48 * 60 * 60 * 1000;
 const state = {
   sales: [],
   saleItems: [],
+  batchMovements: [],
+  batchProducts: [],
   products: [],
   users: [],
   debts: [],
@@ -120,6 +126,28 @@ function isWithinCancelWindow(createdAt) {
   const date = createdAt instanceof Date ? createdAt : getDate(createdAt);
   if (!date) return false;
   return Date.now() - date.getTime() <= CANCEL_WINDOW_MS;
+}
+
+function canCancelSale(row, isBatch) {
+  return (
+    !isBatch &&
+    Boolean(row?.saleId) &&
+    (row.saleStatus || "active") !== "cancelled" &&
+    isWithinCancelWindow(row.createdAt)
+  );
+}
+
+function closeOpenCancelPanels(exceptCard) {
+  document.querySelectorAll(".sale-card.is-cancel-open").forEach(card => {
+    if (exceptCard && card === exceptCard) return;
+    card.classList.remove("is-cancel-open");
+    const toggle = card.querySelector(".sale-cancel-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", "Afficher l'annulation");
+      toggle.textContent = "›";
+    }
+  });
 }
 
 function confirmCancelSaleTriple() {
@@ -218,8 +246,28 @@ function getFilterValues() {
     sellerId: $("sellerFilter")?.value || "all",
     payment: $("paymentFilter")?.value || "",
     status: $("statusFilter")?.value || "",
+    type: $("typeFilter")?.value || "all",
     clientName: ($("clientSearch")?.value || "").trim()
   };
+}
+
+function getBatchProductName(productId) {
+  if (!productId) return "Produit lot";
+  const batchProduct = state.batchProducts.find(p => p.id === productId);
+  if (batchProduct?.name) return batchProduct.name;
+  const classic = state.products.find(p => p.id === productId);
+  return classic?.name || "Produit lot";
+}
+
+function resolveUserName(userId) {
+  if (!userId) return "—";
+  const user = state.users.find(
+    u =>
+      u.userId === userId ||
+      u.uid === userId ||
+      u.id === userId
+  );
+  return user?.name || userId;
 }
 
 function buildSalesQuery(dateRange) {
@@ -305,10 +353,11 @@ async function loadMetaData() {
     return;
   }
 
-  const [productsSnap, usersSnap, debtsSnap] = await Promise.all([
+  const [productsSnap, usersSnap, debtsSnap, batchProdSnap] = await Promise.all([
     getDocs(collection(db, "products")),
     getDocs(collection(db, "users")),
-    getDocs(collection(db, "debts"))
+    getDocs(collection(db, "debts")),
+    getDocs(collection(db, BATCH_COLLECTIONS.PRODUCTS)).catch(() => ({ docs: [] }))
   ]);
 
   state.products = productsSnap.docs.map(d => ({
@@ -322,6 +371,11 @@ async function loadMetaData() {
   }));
 
   state.debts = debtsSnap.docs.map(d => ({
+    id: d.id,
+    ...d.data()
+  }));
+
+  state.batchProducts = batchProdSnap.docs.map(d => ({
     id: d.id,
     ...d.data()
   }));
@@ -343,15 +397,25 @@ function populateFilterOptions() {
     first.textContent = "Tous les produits";
     productFilter.appendChild(first);
 
-    state.products
-      .slice()
-      .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-      .forEach(product => {
-        const option = document.createElement("option");
-      option.value = product.id;
-        option.textContent = product.name || "Produit";
-      productFilter.appendChild(option);
+    const productOptions = new Map();
+
+    state.products.forEach(product => {
+      productOptions.set(product.id, product.name || "Produit");
     });
+    state.batchProducts.forEach(product => {
+      if (!productOptions.has(product.id)) {
+        productOptions.set(product.id, `${product.name || "Produit"} (lot)`);
+      }
+    });
+
+    [...productOptions.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .forEach(([id, name]) => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = name;
+        productFilter.appendChild(option);
+      });
 
     productFilter.value = current;
   }
@@ -450,10 +514,26 @@ async function loadData() {
   try {
     await loadAppCurrency();
 
-    const [salesSnap, saleItemsSnap] = await Promise.all([
-      getDocs(salesQuery),
-      getDocs(saleItemsQuery)
-    ]);
+    const { start, end } = dateRange;
+
+    const [salesSnap, saleItemsSnap, batchMoveSnap, batchProdSnap] =
+      await Promise.all([
+        getDocs(salesQuery),
+        getDocs(saleItemsQuery),
+        getDocs(
+          query(
+            collection(db, BATCH_COLLECTIONS.MOVEMENTS),
+            orderBy("createdAt", "desc")
+          )
+        ).catch(err => {
+          console.warn("[vendus] batch_movements:", err);
+          return { docs: [] };
+        }),
+        getDocs(collection(db, BATCH_COLLECTIONS.PRODUCTS)).catch(err => {
+          console.warn("[vendus] batch_products:", err);
+          return { docs: [] };
+        })
+      ]);
 
     state.sales = salesSnap.docs.map(d => ({
       id: d.id,
@@ -466,12 +546,29 @@ async function loadData() {
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(item => saleIds.has(item.saleId));
 
+    state.batchProducts = batchProdSnap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    state.batchMovements = batchMoveSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => {
+        const d = getDate(m.createdAt);
+        if (!d) return false;
+        if (start && d < start) return false;
+        if (end && d > end) return false;
+        return true;
+      });
+
     buildRows();
     render();
   } catch (error) {
     console.error("[vendus] loadData", error);
     state.sales = [];
     state.saleItems = [];
+    state.batchMovements = [];
+    state.batchProducts = [];
     state.rows = [];
     render();
 
@@ -490,45 +587,102 @@ async function loadData() {
 
 function buildRows() {
   state.rows = [];
+  const filters = getFilterValues();
+  const includeClassic = filters.type === "all" || filters.type === "classic";
+  const includeBatch = filters.type === "all" || filters.type === "batch";
 
-  const saleMap = new Map(state.sales.map(s => [s.id, s]));
+  if (includeClassic) {
+    const saleMap = new Map(state.sales.map(s => [s.id, s]));
 
-  state.saleItems.forEach(item => {
-    const sale = saleMap.get(item.saleId);
-    if (!sale) return;
+    state.saleItems.forEach(item => {
+      const sale = saleMap.get(item.saleId);
+      if (!sale) return;
 
-    const product = state.products.find(p => p.id === item.productId);
+      if (filters.productId && item.productId !== filters.productId) {
+        return;
+      }
 
-    const seller = state.users.find(
-      u =>
-        u.userId === sale.sellerId ||
-        u.uid === sale.sellerId ||
-        u.id === sale.sellerId
-    );
+      const product = state.products.find(p => p.id === item.productId);
+      const seller = state.users.find(
+        u =>
+          u.userId === sale.sellerId ||
+          u.uid === sale.sellerId ||
+          u.id === sale.sellerId
+      );
+      const debt = state.debts.find(e => e.relatedSaleId === sale.id);
 
-    const debt = state.debts.find(e => e.relatedSaleId === sale.id);
-
-    state.rows.push({
-      saleId: sale.id,
-      productId: item.productId,
-      productName: product?.name || "Produit",
-      sellerId: sale.sellerId || "",
-      sellerName: seller?.name || "Vendeur",
-      quantity: n(item.quantity),
-      price: n(item.price),
-      profit: n(item.profit),
-      total: n(item.quantity) * n(item.price),
-      clientName:
-        sale.clientName ||
-        sale.client_name ||
-        debt?.name ||
-        "",
-      paymentStatus: sale.payment_status || "paid",
-      saleStatus: sale.status || "active",
-      amountRemaining: n(debt?.amount_remaining),
-      createdAt: getDate(sale.createdAt)
+      state.rows.push({
+        source: "classic",
+        saleId: sale.id,
+        movementId: null,
+        productId: item.productId,
+        productName: product?.name || "Produit",
+        sellerId: sale.sellerId || "",
+        sellerName: seller?.name || "Vendeur",
+        quantity: n(item.quantity),
+        price: n(item.price),
+        profit: n(item.profit),
+        total: n(item.quantity) * n(item.price),
+        clientName:
+          sale.clientName ||
+          sale.client_name ||
+          debt?.name ||
+          "",
+        paymentStatus: sale.payment_status || "paid",
+        saleStatus: sale.status || "active",
+        amountRemaining: n(debt?.amount_remaining),
+        reason: "sale",
+        reasonLabel: "Vente",
+        createdAt: getDate(sale.createdAt)
+      });
     });
-  });
+  }
+
+  if (includeBatch) {
+    state.batchMovements.forEach(m => {
+      if (filters.productId && m.productId !== filters.productId) {
+        return;
+      }
+      if (
+        filters.sellerId !== "all" &&
+        m.createdBy &&
+        m.createdBy !== filters.sellerId
+      ) {
+        return;
+      }
+      // Paiement / statut classique ne s'appliquent pas aux lots
+      if (filters.payment || filters.status) {
+        if (filters.type === "all") {
+          return;
+        }
+      }
+
+      const qty = n(m.quantity_out);
+      const total = n(m.amount_collected);
+      const unitPrice = qty > 0 ? total / qty : total;
+
+      state.rows.push({
+        source: "batch",
+        saleId: null,
+        movementId: m.id,
+        productId: m.productId,
+        productName: getBatchProductName(m.productId),
+        sellerId: m.createdBy || "",
+        sellerName: resolveUserName(m.createdBy),
+        quantity: qty,
+        price: unitPrice,
+        profit: n(m.profit_real),
+        total,
+        clientName: m.clientName || "",
+        paymentStatus: "paid",
+        saleStatus: "active",
+        amountRemaining: 0,
+        reason: m.reason || "sale",
+        reasonLabel: formatBatchReason(m.reason),
+        createdAt: getDate(m.createdAt)
+      });
+    });
+  }
 
   state.rows.sort((a, b) => {
     const ta = a.createdAt?.getTime() || 0;
@@ -536,9 +690,8 @@ function buildRows() {
     return tb - ta;
   });
 
-  const { clientName } = getFilterValues();
-  if (clientName) {
-    const term = clientName.toLowerCase();
+  if (filters.clientName) {
+    const term = filters.clientName.toLowerCase();
     state.rows = state.rows.filter(row =>
       (row.clientName || "").toLowerCase().includes(term)
     );
@@ -547,6 +700,8 @@ function buildRows() {
 
 function renderKpis(rows) {
   const activeRows = rows.filter(row => row.saleStatus !== "cancelled");
+  const classicRows = activeRows.filter(r => r.source !== "batch");
+  const batchRows = activeRows.filter(r => r.source === "batch");
 
   const soldCount = activeRows.reduce(
     (sum, row) => sum + row.quantity,
@@ -564,8 +719,12 @@ function renderKpis(rows) {
   );
 
   const debtBySale = new Map();
-  activeRows.forEach(row => {
-    if (row.paymentStatus === "partial" && row.amountRemaining > 0) {
+  classicRows.forEach(row => {
+    if (
+      row.saleId &&
+      row.paymentStatus === "partial" &&
+      row.amountRemaining > 0
+    ) {
       debtBySale.set(row.saleId, row.amountRemaining);
     }
   });
@@ -584,12 +743,16 @@ function renderKpis(rows) {
   }
 
   $("debtTotal").textContent = formatMoney(debtTotal);
-  $("resultCount").textContent = String(rows.length);
+  if ($("resultCount")) {
+    $("resultCount").textContent =
+      `${rows.length} ligne(s) — Classique : ${classicRows.length} • Lots : ${batchRows.length}`;
+  }
 }
 
 function createSaleCard(row, showClientEdit = false) {
   const card = document.createElement("div");
   card.className = "sale-card";
+  const isBatch = row.source === "batch";
 
   if (row.saleStatus === "cancelled") {
     card.classList.add("sale-cancelled");
@@ -609,17 +772,29 @@ function createSaleCard(row, showClientEdit = false) {
   top.appendChild(product);
   top.appendChild(price);
 
+  const typeBadge = document.createElement("span");
+  typeBadge.className = `badge ${isBatch ? "badge-batch" : "badge-classic"}`;
+  typeBadge.textContent = isBatch ? "Lot" : "Classique";
+
   const clientMeta = document.createElement("div");
   clientMeta.className = "sale-meta";
   clientMeta.textContent = `Client : ${row.clientName || "-"}`;
 
   const sellerMeta = document.createElement("div");
   sellerMeta.className = "sale-meta";
-  sellerMeta.textContent = `Vendeur : ${row.sellerName}`;
+  sellerMeta.textContent = isBatch
+    ? `Créé par : ${row.sellerName}`
+    : `Vendeur : ${row.sellerName}`;
 
   const qtyMeta = document.createElement("div");
   qtyMeta.className = "sale-meta";
-  qtyMeta.textContent = `Qté : ${row.quantity} × ${formatMoney(row.price)}`;
+  if (isBatch) {
+    qtyMeta.textContent =
+      `Qté : ${row.quantity} • Marge : ${formatMoney(row.profit)}` +
+      ` • ${row.reasonLabel || "Vente"}`;
+  } else {
+    qtyMeta.textContent = `Qté : ${row.quantity} × ${formatMoney(row.price)}`;
+  }
 
   const dateMeta = document.createElement("div");
   dateMeta.className = "sale-meta";
@@ -637,7 +812,15 @@ function createSaleCard(row, showClientEdit = false) {
   const badge = document.createElement("span");
   badge.className = "badge";
 
-  if (row.saleStatus === "cancelled") {
+  if (isBatch) {
+    if (row.reason === "loss" || row.reason === "perte") {
+      badge.classList.add("badge-loss");
+      badge.textContent = "Perte";
+    } else {
+      badge.classList.add("badge-paid");
+      badge.textContent = row.reasonLabel || "Lot";
+    }
+  } else if (row.saleStatus === "cancelled") {
     badge.classList.add("badge-cancelled");
     badge.textContent = "Annulée";
   } else if (row.paymentStatus === "partial") {
@@ -649,6 +832,7 @@ function createSaleCard(row, showClientEdit = false) {
   }
 
   card.appendChild(top);
+  card.appendChild(typeBadge);
   card.appendChild(clientMeta);
   card.appendChild(sellerMeta);
   card.appendChild(qtyMeta);
@@ -656,6 +840,7 @@ function createSaleCard(row, showClientEdit = false) {
   card.appendChild(badge);
 
   const canActOnSale =
+    !isBatch &&
     showClientEdit &&
     row.saleStatus !== "cancelled" &&
     row.saleId;
@@ -673,20 +858,52 @@ function createSaleCard(row, showClientEdit = false) {
       await editSaleClientName(row.saleId, row.clientName);
     });
     actions.appendChild(editBtn);
-
-    if (isWithinCancelWindow(row.createdAt)) {
-      const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.className = "btn-cancel-sale";
-      cancelBtn.id = `cancelSale_${row.saleId}`;
-      cancelBtn.textContent = "Annuler la vente";
-      bindActionButton(cancelBtn, async () => {
-        await requestCancelSale(row.saleId);
-      });
-      actions.appendChild(cancelBtn);
-    }
-
     card.appendChild(actions);
+  }
+
+  const canCancel = showClientEdit && canCancelSale(row, isBatch);
+  if (canCancel) {
+    card.classList.add("has-cancel-rail");
+
+    const rail = document.createElement("div");
+    rail.className = "sale-cancel-rail";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "sale-cancel-toggle";
+    toggle.id = `cancelToggle_${row.saleId}`;
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Afficher l'annulation");
+    toggle.textContent = "›";
+    toggle.addEventListener("click", event => {
+      event.stopPropagation();
+      const open = !card.classList.contains("is-cancel-open");
+      closeOpenCancelPanels(card);
+      card.classList.toggle("is-cancel-open", open);
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      toggle.textContent = open ? "‹" : "›";
+      toggle.setAttribute(
+        "aria-label",
+        open ? "Masquer l'annulation" : "Afficher l'annulation"
+      );
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "sale-cancel-panel";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn-cancel-sale";
+    cancelBtn.id = `cancelSale_${row.saleId}`;
+    cancelBtn.textContent = "Annuler la vente";
+    bindActionButton(cancelBtn, async () => {
+      await requestCancelSale(row.saleId);
+    });
+    panel.appendChild(cancelBtn);
+
+    rail.appendChild(toggle);
+    rail.appendChild(panel);
+    card.appendChild(rail);
   }
 
   return card;
@@ -905,6 +1122,7 @@ function resetFilters() {
   $("productFilter").value = "";
   $("paymentFilter").value = "";
   $("statusFilter").value = "";
+  if ($("typeFilter")) $("typeFilter").value = "all";
   $("clientSearch").value = "";
   $("statsRange").value = "today";
   $("dateFrom").value = "";

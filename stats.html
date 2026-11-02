@@ -324,19 +324,28 @@ main{
   margin:0;
 }
 
-.chart-reset-zoom{
+.chart-zoom-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+}
+
+.chart-reset-zoom,
+.chart-zoom-btn{
   appearance:none;
   border:1px solid #d0d5dd;
   background:#fff;
   color:#344054;
   border-radius:999px;
-  padding:4px 10px;
+  padding:6px 12px;
   font-size:11px;
   font-weight:600;
   cursor:pointer;
 }
 
-.chart-reset-zoom:hover{
+.chart-reset-zoom:hover,
+.chart-zoom-btn:hover{
   background:#f2f4f7;
 }
 
@@ -1014,7 +1023,11 @@ nav .nav-item.active{
       <div id="chartMetricGrid" class="chart-metric-grid" role="group" aria-label="Séries du graphique"></div>
       <div class="chart-toolbar" id="chartToolbar">
         <p class="chart-zoom-hint" id="chartZoomHint">Zoom : molette / pinch · Pan : glisser</p>
-        <button type="button" class="chart-reset-zoom" id="chartResetZoomBtn">Réinit. zoom</button>
+        <div class="chart-zoom-actions" id="chartZoomActions">
+          <button type="button" class="chart-zoom-btn" id="chartZoomOutBtn">Dézoomer</button>
+          <button type="button" class="chart-zoom-btn" id="chartZoomInBtn">Zoomer</button>
+          <button type="button" class="chart-reset-zoom" id="chartResetZoomBtn">Réinit. zoom</button>
+        </div>
       </div>
       <div class="chart-container" id="chartContainer">
         <canvas id="statsChart"></canvas>

@@ -28,26 +28,25 @@ Chart.register(
 let statsChart = null;
 let isRendering = false;
 let gridBound = false;
-let zoomControlsBound = false;
 
 /** Une tuile = une courbe (style Search Console). */
 const SERIES_DEFS = [
-  { id: "classic_ca", group: "Classique", label: "CA classique", color: "#4285F4", kind: "money", defaultOn: true },
-  { id: "classic_profit", group: "Classique", label: "Profit classique", color: "#A142F4", kind: "money", defaultOn: true },
-  { id: "classic_cash", group: "Classique", label: "Cash classique", color: "#0D9488", kind: "money", defaultOn: false },
-  { id: "classic_count", group: "Classique", label: "Nb ventes classique", color: "#34A853", kind: "count", defaultOn: false },
+  { id: "classic_ca", group: "Classique", label: "CA classique", color: "#1565C0", kind: "money", defaultOn: true },
+  { id: "classic_profit", group: "Classique", label: "Profit classique", color: "#6A1B9A", kind: "money", defaultOn: true },
+  { id: "classic_cash", group: "Classique", label: "Cash classique", color: "#00695C", kind: "money", defaultOn: false },
+  { id: "classic_count", group: "Classique", label: "Nb ventes classique", color: "#2E7D32", kind: "count", defaultOn: false },
 
-  { id: "batch_ca", group: "Batch", label: "Encaissé batch", color: "#E37400", kind: "money", defaultOn: true },
-  { id: "batch_profit", group: "Batch", label: "Bénéfice batch", color: "#F4B400", kind: "money", defaultOn: true },
-  { id: "batch_cash", group: "Batch", label: "Cash batch", color: "#F9AB00", kind: "money", defaultOn: false },
-  { id: "batch_qty", group: "Batch", label: "Qté vendue batch", color: "#FA7B17", kind: "count", defaultOn: false },
+  { id: "batch_ca", group: "Batch", label: "Encaissé batch", color: "#E65100", kind: "money", defaultOn: true },
+  { id: "batch_profit", group: "Batch", label: "Bénéfice batch", color: "#F9A825", kind: "money", defaultOn: true },
+  { id: "batch_cash", group: "Batch", label: "Cash batch", color: "#C2185B", kind: "money", defaultOn: false },
+  { id: "batch_qty", group: "Batch", label: "Qté vendue batch", color: "#BF360C", kind: "count", defaultOn: false },
 
-  { id: "total_ca", group: "Total", label: "CA Total", color: "#1A73E8", kind: "money", defaultOn: true },
-  { id: "total_profit", group: "Total", label: "Profit Total", color: "#7B1FA2", kind: "money", defaultOn: true },
-  { id: "total_cash", group: "Total", label: "Cash Total", color: "#5E35B1", kind: "money", defaultOn: false },
-  { id: "total_count", group: "Total", label: "Nb opérations Total", color: "#00897B", kind: "count", defaultOn: false },
+  { id: "total_ca", group: "Total", label: "CA Total", color: "#0D47A1", kind: "money", defaultOn: true },
+  { id: "total_profit", group: "Total", label: "Profit Total", color: "#4A148C", kind: "money", defaultOn: true },
+  { id: "total_cash", group: "Total", label: "Cash Total", color: "#00838F", kind: "money", defaultOn: false },
+  { id: "total_count", group: "Total", label: "Nb opérations Total", color: "#4E342E", kind: "count", defaultOn: false },
 
-  { id: "prev_ca", group: "Comparaison", label: "CA période préc.", color: "#9AA0A6", kind: "money", defaultOn: false, dashed: true }
+  { id: "prev_ca", group: "Comparaison", label: "CA période préc.", color: "#78909C", kind: "money", defaultOn: false, dashed: true }
 ];
 
 const seriesEnabled = {};
@@ -304,69 +303,12 @@ function bindMetricGrid() {
   }
 }
 
-function ensureZoomControls() {
-  if (zoomControlsBound) return;
-  zoomControlsBound = true;
-
-  const canvas = document.getElementById("statsChart");
-  if (!canvas) return;
-
-  const host = canvas.parentElement;
-  if (!host) return;
-
-  const existing = host.querySelector(".chart-zoom-controls");
-  if (existing) return;
-
-  const controls = document.createElement("div");
-  controls.className = "chart-zoom-controls";
-  controls.style.display = "flex";
-  controls.style.alignItems = "center";
-  controls.style.justifyContent = "flex-end";
-  controls.style.gap = "8px";
-  controls.style.margin = "0 0 10px";
-
-  const zoomOut = document.createElement("button");
-  zoomOut.type = "button";
-  zoomOut.id = "chartZoomOutBtn";
-  zoomOut.textContent = "Dézoomer";
-  zoomOut.className = "chart-zoom-btn";
-  zoomOut.style.padding = "6px 12px";
-  zoomOut.style.borderRadius = "999px";
-  zoomOut.style.border = "1px solid rgba(0,0,0,0.12)";
-  zoomOut.style.background = "#f7f7f7";
-  zoomOut.style.cursor = "pointer";
-  zoomOut.addEventListener("click", () => {
-    if (!statsChart) return;
-    statsChart.zoom(0.8);
-  });
-
-  const reset = document.createElement("button");
-  reset.type = "button";
-  reset.id = "chartResetZoomBtn";
-  reset.textContent = "Réinit. zoom";
-  reset.className = "chart-zoom-btn";
-  reset.style.padding = "6px 12px";
-  reset.style.borderRadius = "999px";
-  reset.style.border = "1px solid rgba(0,0,0,0.12)";
-  reset.style.background = "#f7f7f7";
-  reset.style.cursor = "pointer";
-  reset.addEventListener("click", () => {
-    if (statsChart?.resetZoom) {
-      statsChart.resetZoom();
-    }
-  });
-
-  controls.append(zoomOut, reset);
-  host.insertBefore(controls, canvas);
-}
-
 export function renderChart() {
   if (isRendering) return;
   isRendering = true;
 
   try {
     bindMetricGrid();
-    ensureZoomControls();
 
     const canvas = document.getElementById("statsChart");
     if (!canvas) {

@@ -306,8 +306,19 @@ export async function recordBatchSale({
 ================================ */
 
 export async function loadBatchMovements(filters = {}) {
+  const constraints = [];
+
+  if (filters.start instanceof Date) {
+    constraints.push(where("createdAt", ">=", Timestamp.fromDate(filters.start)));
+  }
+  if (filters.end instanceof Date) {
+    constraints.push(where("createdAt", "<=", Timestamp.fromDate(filters.end)));
+  }
+
+  constraints.push(orderBy("createdAt", "desc"));
+
   const snap = await getDocs(
-    query(collection(db, BATCH_COLLECTIONS.MOVEMENTS), orderBy("createdAt", "desc"))
+    query(collection(db, BATCH_COLLECTIONS.MOVEMENTS), ...constraints)
   );
 
   let rows = snap.docs.map(d => ({ id: d.id, movementId: d.id, ...d.data() }));
