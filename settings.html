@@ -135,6 +135,84 @@ main{
 
 }
 
+/* CACHE / REFRESH TOOLS (bas de page, replié) */
+
+.cache-tools{
+  margin-top:8px;
+  padding:10px 14px;
+  background:#fafafa;
+  box-shadow:none;
+  border:1px dashed #d0d0d0;
+}
+
+.cache-tools-toggle{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  border:none;
+  background:transparent;
+  padding:8px 0;
+  cursor:pointer;
+  color:#555;
+  font-size:13px;
+  font-weight:600;
+}
+
+.cache-tools-arrow{
+  font-size:12px;
+  transition:transform 0.2s ease;
+  color:#888;
+}
+
+.cache-tools-toggle[aria-expanded="true"] .cache-tools-arrow{
+  transform:rotate(180deg);
+}
+
+.cache-tools-panel{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding-top:8px;
+  padding-bottom:4px;
+  border-top:1px solid #e8e8e8;
+  margin-top:4px;
+}
+
+.cache-tools-panel[hidden]{
+  display:none;
+}
+
+.cache-tools-help{
+  margin:0 0 4px;
+  font-size:12px;
+  color:#777;
+  line-height:1.4;
+}
+
+.cache-tools-btn{
+  width:100%;
+  border:1px solid #ccc;
+  background:#fff;
+  color:#222;
+  border-radius:10px;
+  padding:11px 12px;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+}
+
+.cache-tools-btn:active{
+  transform:scale(0.98);
+}
+
+.cache-tools-btn-strong{
+  border-color:#0B3D2E;
+  background:#0B3D2E;
+  color:#fff;
+}
+
 /* TOP ACTIONS */
 
 .top-actions{
@@ -820,6 +898,32 @@ nav .nav-item.active{
   </div>
 
   </section>
+
+  <section class="section-card cache-tools" id="cacheToolsSection">
+    <button
+      type="button"
+      id="cacheToolsToggle"
+      class="cache-tools-toggle"
+      aria-expanded="false"
+      aria-controls="cacheToolsPanel"
+    >
+      <span class="cache-tools-toggle-label">Outils de mise à jour</span>
+      <span id="cacheToolsArrow" class="cache-tools-arrow" aria-hidden="true">▼</span>
+    </button>
+
+    <div id="cacheToolsPanel" class="cache-tools-panel" hidden>
+      <p class="cache-tools-help">
+        Contourne le cache navigateur / mobile si l’application ne se met pas à jour.
+      </p>
+      <button type="button" id="forceClearCacheBtn" class="cache-tools-btn">
+        Vider le cache local et recharger
+      </button>
+      <button type="button" id="forceRefreshServerBtn" class="cache-tools-btn cache-tools-btn-strong">
+        Forcer la mise à jour serveur
+      </button>
+    </div>
+  </section>
+
 </main>
 
 <!-- MODAL -->

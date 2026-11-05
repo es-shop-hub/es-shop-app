@@ -458,6 +458,85 @@ async function loadAppConfig() {
 }
 
 /* =========================
+   CACHE / FORCE REFRESH (bas de page)
+========================= */
+
+function clearLocalAppStorage() {
+  try {
+    localStorage.clear();
+  } catch (_) {
+    /* ignore */
+  }
+  try {
+    sessionStorage.clear();
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+async function clearServiceWorkerCaches() {
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch (_) {
+    /* ignore */
+  }
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((reg) => reg.unregister()));
+    }
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+/** Option A : vider stockage local + rechargement forcé */
+async function viderCacheEtRecharger() {
+  clearLocalAppStorage();
+  await clearServiceWorkerCaches();
+
+  try {
+    window.location.reload(true);
+  } catch (_) {
+    window.location.reload();
+  }
+}
+
+/** Option B : bypass cache via paramètre timestamp unique */
+function forceRefreshServer() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("v", String(Date.now()));
+  window.location.href = url.toString();
+}
+
+function initCacheTools() {
+  const toggle = document.getElementById("cacheToolsToggle");
+  const panel = document.getElementById("cacheToolsPanel");
+  const clearBtn = document.getElementById("forceClearCacheBtn");
+  const refreshBtn = document.getElementById("forceRefreshServerBtn");
+
+  if (!toggle || !panel) return;
+
+  toggle.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-expanded") === "true";
+    const next = !open;
+    toggle.setAttribute("aria-expanded", next ? "true" : "false");
+    panel.hidden = !next;
+  });
+
+  bindActionButton(clearBtn, viderCacheEtRecharger);
+  bindActionButton(refreshBtn, async () => {
+    forceRefreshServer();
+  });
+}
+
+initCacheTools();
+
+/* =========================
    AUTH
 ========================= */
 
