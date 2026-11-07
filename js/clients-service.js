@@ -8,11 +8,13 @@ import {
   query,
   where,
   limit,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from "./firebase.js";
 
 const CLIENTS_COL = "clients";
 const REWARDS_COL = "client_rewards";
+const EXPENSES_COL = "expenses";
 const NAME_MAX = 80;
 
 export function sanitizeClientName(value, max = NAME_MAX) {
@@ -131,6 +133,11 @@ export async function createClientReward(data, userId) {
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         })();
 
+  const note =
+    typeof data.note === "string" ? data.note.trim().slice(0, 200) : "";
+  const now = Timestamp.now();
+  const createdBy = userId || "";
+
   const payload = {
     clientId: data.clientId || null,
     clientName,
@@ -139,14 +146,34 @@ export async function createClientReward(data, userId) {
     percentUsed:
       data.percentUsed == null ? null : round2(data.percentUsed),
     clientSalesTotal: round2(data.clientSalesTotal || 0),
-    note: typeof data.note === "string" ? data.note.trim().slice(0, 200) : "",
+    note,
     status: "active",
-    createdAt: Timestamp.now(),
-    createdBy: userId || ""
+    createdAt: now,
+    createdBy
   };
 
-  const ref = await addDoc(collection(db, REWARDS_COL), payload);
-  return { id: ref.id, ...payload };
+  const rewardRef = doc(collection(db, REWARDS_COL));
+  const expenseRef = doc(collection(db, EXPENSES_COL));
+  const batch = writeBatch(db);
+
+  batch.set(rewardRef, payload);
+  batch.set(expenseRef, {
+    reason: `Récompense client — ${clientName}`,
+    category: "other",
+    type: "client_reward",
+    amount,
+    relatedTo: rewardRef.id,
+    relatedPurchaseId: null,
+    note,
+    isSystemCorrection: false,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+    createdBy
+  });
+
+  await batch.commit();
+  return { id: rewardRef.id, ...payload };
 }
 
 export { CLIENTS_COL, REWARDS_COL };

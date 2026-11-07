@@ -28,6 +28,16 @@ Chart.register(
 let statsChart = null;
 let isRendering = false;
 let gridBound = false;
+let pinchLastDist = 0;
+
+const ZOOM_IN = 1.2;
+const ZOOM_OUT = 0.4;
+const WHEEL_IN = 1.08;
+const WHEEL_OUT = 0.65;
+const PINCH_OUT_EXP = 1.8;
+const MAX_RANGE_MULT = 6;
+
+let originalRanges = { x: null, y: null };
 
 /** Une tuile = une courbe (style Search Console). */
 const SERIES_DEFS = [
@@ -172,6 +182,159 @@ function destroyChart() {
   }
 }
 
+function storeOriginalRanges(chart) {
+  if (!chart?.scales) return;
+  const x = chart.scales.x;
+  const y = chart.scales.y;
+  originalRanges = {
+    x:
+      x && Number.isFinite(x.min) && Number.isFinite(x.max)
+        ? { min: x.min, max: x.max }
+        : null,
+    y:
+      y && Number.isFinite(y.min) && Number.isFinite(y.max)
+        ? { min: y.min, max: y.max }
+        : null
+  };
+}
+
+function setPanEnabled(enabled) {
+  const pan = statsChart?.options?.plugins?.zoom?.pan;
+  if (!pan) return;
+  pan.enabled = enabled;
+}
+
+function scaleOrigRange(scaleId, fallbackRange) {
+  const orig = originalRanges[scaleId];
+  if (orig && Number.isFinite(orig.max - orig.min) && orig.max !== orig.min) {
+    return orig.max - orig.min;
+  }
+  return fallbackRange;
+}
+
+function applyScaleFactor(scaleId, factor) {
+  if (!statsChart || !(factor > 0) || factor === 1) return;
+  const scale = statsChart.scales[scaleId];
+  const opts = statsChart.options?.scales?.[scaleId];
+  if (!scale || !opts) return;
+
+  const range = scale.max - scale.min;
+  if (!Number.isFinite(range) || range <= 0) return;
+
+  const origRange = scaleOrigRange(scaleId, range);
+  const maxRange = origRange * MAX_RANGE_MULT;
+  let nextRange = range / factor;
+
+  if (factor < 1) {
+    if (range >= maxRange * 0.999) return;
+    if (nextRange > maxRange) nextRange = maxRange;
+  } else if (!(nextRange > 0) || !Number.isFinite(nextRange)) {
+    return;
+  }
+
+  const center = (scale.min + scale.max) / 2;
+  const nextMin = center - nextRange / 2;
+  const nextMax = center + nextRange / 2;
+
+  if (scaleId === "y") opts.beginAtZero = false;
+  opts.min = nextMin;
+  opts.max = nextMax;
+}
+
+function zoomByAll(factor) {
+  if (!statsChart) return;
+  applyScaleFactor("x", factor);
+  applyScaleFactor("y", factor);
+  statsChart.update("none");
+}
+
+function zoomOutAll(factor) {
+  zoomByAll(factor);
+}
+
+function restoreInitialZoom() {
+  if (!statsChart) return;
+  const xOpts = statsChart.options?.scales?.x;
+  const yOpts = statsChart.options?.scales?.y;
+  if (xOpts) {
+    delete xOpts.min;
+    delete xOpts.max;
+  }
+  if (yOpts) {
+    yOpts.beginAtZero = true;
+    delete yOpts.min;
+    delete yOpts.max;
+  }
+  if (typeof statsChart.resetZoom === "function") {
+    statsChart.resetZoom();
+    return;
+  }
+  statsChart.update();
+}
+
+function touchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+function onChartWheel(event) {
+  if (!statsChart) return;
+  event.preventDefault();
+  if (event.deltaY > 0) {
+    zoomOutAll(WHEEL_OUT);
+    return;
+  }
+  zoomByAll(WHEEL_IN);
+}
+
+function onPinchStart(event) {
+  if (event.touches.length === 2) {
+    pinchLastDist = touchDistance(event.touches);
+    setPanEnabled(false);
+    event.preventDefault();
+  }
+}
+
+function onPinchMove(event) {
+  if (!statsChart || event.touches.length !== 2) return;
+  event.preventDefault();
+  const dist = touchDistance(event.touches);
+  if (!(pinchLastDist > 0) || !(dist > 0)) {
+    pinchLastDist = dist;
+    return;
+  }
+  const factor = dist / pinchLastDist;
+  pinchLastDist = dist;
+  if (factor < 1) {
+    zoomOutAll(Math.pow(factor, PINCH_OUT_EXP));
+    return;
+  }
+  if (factor > 1) {
+    zoomByAll(factor);
+  }
+}
+
+function onPinchEnd(event) {
+  if (event.touches.length < 2) {
+    pinchLastDist = 0;
+    setPanEnabled(true);
+  }
+}
+
+function bindChartGestures() {
+  const host =
+    document.getElementById("chartContainer") ||
+    document.getElementById("statsChart");
+  if (!host || host.dataset.zoomGesturesBound === "1") return;
+  host.dataset.zoomGesturesBound = "1";
+  host.addEventListener("wheel", onChartWheel, { passive: false });
+  host.addEventListener("touchstart", onPinchStart, { passive: false });
+  host.addEventListener("touchmove", onPinchMove, { passive: false });
+  host.addEventListener("touchend", onPinchEnd, { passive: false });
+  host.addEventListener("touchcancel", onPinchEnd, { passive: false });
+}
+
 function buildSeriesMaps(dataPack) {
   const {
     classic,
@@ -274,13 +437,13 @@ function bindMetricGrid() {
     renderChart();
   });
 
+  bindChartGestures();
+
   const resetBtn = document.getElementById("chartResetZoomBtn");
   if (resetBtn && resetBtn.dataset.zoomBound !== "1") {
     resetBtn.dataset.zoomBound = "1";
     resetBtn.addEventListener("click", () => {
-      if (statsChart?.resetZoom) {
-        statsChart.resetZoom();
-      }
+      restoreInitialZoom();
     });
   }
 
@@ -288,8 +451,7 @@ function bindMetricGrid() {
   if (zoomOutBtn && zoomOutBtn.dataset.zoomBound !== "1") {
     zoomOutBtn.dataset.zoomBound = "1";
     zoomOutBtn.addEventListener("click", () => {
-      if (!statsChart) return;
-      statsChart.zoom(0.8);
+      zoomOutAll(ZOOM_OUT);
     });
   }
 
@@ -297,8 +459,7 @@ function bindMetricGrid() {
   if (zoomInBtn && zoomInBtn.dataset.zoomBound !== "1") {
     zoomInBtn.dataset.zoomBound = "1";
     zoomInBtn.addEventListener("click", () => {
-      if (!statsChart) return;
-      statsChart.zoom(1.2);
+      zoomByAll(ZOOM_IN);
     });
   }
 }
@@ -414,18 +575,14 @@ export function renderChart() {
             bodyFont: { size: 11 }
           },
           zoom: {
-            limits: {
-              x: { min: "original", max: "original" },
-              y: { min: "original", max: "original" }
-            },
             pan: {
               enabled: true,
               mode: "xy",
               modifierKey: null
             },
             zoom: {
-              wheel: { enabled: true, speed: 0.08 },
-              pinch: { enabled: true },
+              wheel: { enabled: false },
+              pinch: { enabled: false },
               mode: "xy",
               drag: {
                 enabled: false
@@ -459,6 +616,7 @@ export function renderChart() {
         }
       }
     });
+    storeOriginalRanges(statsChart);
   } finally {
     isRendering = false;
   }

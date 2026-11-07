@@ -194,12 +194,12 @@ function createBadge(role) {
   span.className = "role-badge";
 
   if (role === "admin") {
-    span.classList.add("admin");
+    span.classList.add("role-admin");
   } else if (role === "user") {
-    span.classList.add("seller");
+    span.classList.add("role-seller");
     span.textContent = "user (attente)";
   } else {
-    span.classList.add("seller");
+    span.classList.add("role-seller");
   }
 
   return span;
@@ -551,6 +551,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   currentUserId = user.uid;
+  console.log("[settings.js] User ID:", currentUserId);
 
   try {
 
@@ -563,7 +564,7 @@ onAuthStateChanged(auth, async (user) => {
     if (!userSnap.exists()) {
 
       alert("Utilisateur introuvable");
-
+      console.error("[settings.js] User document not found for ID:", currentUserId);
       return;
     }
 
@@ -572,6 +573,7 @@ onAuthStateChanged(auth, async (user) => {
 
     currentUserRole =
       userData.role;
+    console.log("[settings.js] User role:", currentUserRole);
 
     if (
       currentUserRole !== "admin"
@@ -600,6 +602,7 @@ onAuthStateChanged(auth, async (user) => {
         "⛔ Accès refusé";
 
       document.body.appendChild(denied);
+      console.warn("[settings.js] Access denied for role:", currentUserRole);
 
       return;
     }
