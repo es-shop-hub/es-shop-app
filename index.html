@@ -251,12 +251,12 @@
 
     .cart-item {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       justify-content: space-between;
       align-items: center;
       gap: 6px;
       margin-bottom: 6px;
-      padding: 6px 12px;
+      padding: 5px 12px;
       background: #F3F4F6;
       border: 1px solid #E5E7EB;
       border-radius: 12px;
@@ -264,7 +264,7 @@
     }
 
     .cart-item-info {
-      flex: 1 1 120px;
+      flex: 1 1 0;
       min-width: 0;
       display: flex;
       flex-direction: column;
@@ -291,11 +291,11 @@
 
     .cart-controls {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       justify-content: flex-end;
       gap: 4px;
-      flex: 1 1 auto;
+      flex: 0 0 auto;
     }
 
     .cart-step-btn {

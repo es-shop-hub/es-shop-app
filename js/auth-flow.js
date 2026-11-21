@@ -165,10 +165,17 @@ export function authErrorMessage(err, fallback = "Erreur") {
   if (code === "auth/invalid-email") return "Email invalide";
   if (code === "auth/invalid-credential") return "Email ou mot de passe incorrect";
   if (code === "auth/user-disabled") return "Compte désactivé";
+  if (code === "auth/user-not-found") {
+    return "Aucun compte Email/Password pour cet email (compte Google seul = pas de reset password).";
+  }
+  if (code === "auth/missing-email") return "Veuillez entrer une adresse email.";
   if (code === "auth/email-already-in-use") return "Email déjà utilisé";
   if (code === "auth/weak-password") return "Mot de passe trop faible (6 caractères min.)";
   if (code === "auth/network-request-failed") return "Pas de connexion internet";
   if (code === "auth/too-many-requests") return "Trop de tentatives. Réessayez plus tard";
+  if (code === "auth/invalid-continue-uri" || code === "auth/unauthorized-continue-uri") {
+    return "URL de retour non autorisée. Vérifie Authorized domains dans Firebase.";
+  }
   if (code === "auth/popup-closed-by-user") return "Connexion Google annulée";
   if (code === "auth/popup-blocked") return "Popup bloquée par le navigateur. Autorisez les popups pour ce site.";
   if (code === "auth/cancelled-popup-request") return "Connexion Google annulée";

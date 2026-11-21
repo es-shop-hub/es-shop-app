@@ -1,44 +1,60 @@
-import { auth, sendPasswordResetEmail } from "./auth.js";
+import {
+  getAuth,
+  sendPasswordResetEmail
+} from "./auth.js";
+import { authErrorMessage } from "./auth-flow.js";
+import { bindFormAction } from "./utils/buttonManager.js";
 
+const auth = getAuth();
 const resetPasswordForm = document.getElementById("resetPasswordForm");
 const emailInput = document.getElementById("email");
 
-if (resetPasswordForm) {
-  resetPasswordForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
+function buildActionCodeSettings() {
+  const origin = window.location.origin;
+  // file:// ou origine invalide → laisser Firebase gérer le lien par défaut
+  if (!origin || origin === "null" || origin.startsWith("file:")) {
+    return undefined;
+  }
 
-    const email = emailInput?.value.trim().toLowerCase() || "";
-
-    if (!email) {
-      alert("Veuillez entrer votre adresse email.");
-      return;
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, email);
-      alert("Un lien de réinitialisation de mot de passe a été envoyé à votre adresse email.");
-      window.location.href = "login.html";
-    } catch (error) {
-      console.error("[reset-password] erreur:", error?.code || error?.message, error);
-
-      let errorMessage = "Erreur lors de l'envoi du lien de réinitialisation.";
-
-      switch (error?.code) {
-        case "auth/invalid-email":
-          errorMessage = "L'adresse email est mal formatée.";
-          break;
-        case "auth/user-not-found":
-          errorMessage = "Aucun utilisateur trouvé avec cette adresse email.";
-          break;
-        case "auth/missing-email":
-          errorMessage = "Veuillez entrer une adresse email.";
-          break;
-        default:
-          errorMessage = error?.message || errorMessage;
-          break;
-      }
-
-      alert(errorMessage);
-    }
-  });
+  return {
+    url: `${origin}/login.html`,
+    handleCodeInApp: false
+  };
 }
+
+bindFormAction(resetPasswordForm, async () => {
+  const email = emailInput?.value.trim().toLowerCase() || "";
+
+  if (!email) {
+    alert("Veuillez entrer votre adresse email.");
+    return;
+  }
+
+  if (window.location.protocol === "file:") {
+    alert("Ouvre l'app via HTTPS (Firebase Hosting), pas en fichier local.");
+    return;
+  }
+
+  try {
+    const actionCodeSettings = buildActionCodeSettings();
+
+    if (actionCodeSettings) {
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    } else {
+      await sendPasswordResetEmail(auth, email);
+    }
+
+    alert(
+      "Si un compte Email/Password existe pour cet email, un lien de réinitialisation a été envoyé. Vérifie aussi les spams."
+    );
+    window.location.replace("login.html");
+  } catch (error) {
+    console.error("[reset-password]", error?.code || error?.message, error);
+    alert(
+      authErrorMessage(
+        error,
+        error?.message || "Erreur lors de l'envoi du lien de réinitialisation."
+      )
+    );
+  }
+});
