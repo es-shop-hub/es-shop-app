@@ -11,16 +11,20 @@ import {
   where,
   orderBy,
   Timestamp,
-  runTransaction
+  runTransaction,
+  writeLog
 } from "../../js/firebase.js";
 
 import {
   BATCH_COLLECTIONS,
   BATCH_STATUS,
+  BATCH_EDIT_WINDOW_MS,
   round2,
   sanitizeText,
   parsePositiveNumber,
-  parsePositiveInt
+  parsePositiveInt,
+  getBatchCreatedAtDate,
+  isWithinBatchEditWindow
 } from "./batch-utils.js";
 
 /* ================================
@@ -164,6 +168,13 @@ export async function createBatch({ productId, quantityInitial, costTotal }, use
     status: BATCH_STATUS.ACTIVE,
     createdAt: now,
     createdBy: userId
+  });
+
+  await writeLog({
+    userId,
+    action: "batch_create",
+    targetId: ref.id,
+    details: { productId, quantity_initial: qty, cost_total: cost, cost_unit_avg: costUnitAvg }
   });
 
   return ref.id;
@@ -341,9 +352,30 @@ export function aggregateBatchStats(batches, movements, productsMap) {
   let totalStockRemaining = 0;
   let totalCostConsumed = 0;
   let totalCostEngaged = 0;
+  let totalEstimatedRevenue = 0;
 
   const byProduct = {};
   const byBatch = {};
+  const productSellAgg = {};
+
+  movements.forEach(m => {
+    const productId = m.productId;
+    if (!productId) return;
+    if (!productSellAgg[productId]) {
+      productSellAgg[productId] = { collected: 0, qty: 0 };
+    }
+    productSellAgg[productId].collected = round2(
+      productSellAgg[productId].collected + round2(m.amount_collected || 0)
+    );
+    productSellAgg[productId].qty += Number(m.quantity_out) || 0;
+  });
+
+  const avgUnitSellByProduct = {};
+  Object.entries(productSellAgg).forEach(([productId, agg]) => {
+    if (agg.qty > 0) {
+      avgUnitSellByProduct[productId] = round2(agg.collected / agg.qty);
+    }
+  });
 
   batches.forEach(batch => {
     if (batch.status === BATCH_STATUS.CANCELLED) return;
@@ -351,9 +383,15 @@ export function aggregateBatchStats(batches, movements, productsMap) {
     const qtyRem = batch.quantity_remaining || 0;
     const costUnit = Number(batch.cost_unit_avg) || 0;
     const costEngaged = round2(qtyRem * costUnit);
+    const avgUnitSell = avgUnitSellByProduct[batch.productId];
+    const estimatedRevenue =
+      avgUnitSell != null ? round2(qtyRem * avgUnitSell) : null;
 
     totalStockRemaining += qtyRem;
     totalCostEngaged = round2(totalCostEngaged + costEngaged);
+    if (estimatedRevenue != null) {
+      totalEstimatedRevenue = round2(totalEstimatedRevenue + estimatedRevenue);
+    }
 
     byBatch[batch.id] = {
       batchId: batch.id,
@@ -369,6 +407,8 @@ export function aggregateBatchStats(batches, movements, productsMap) {
       qty_out: 0,
       costConsumed: 0,
       costEngaged,
+      estimatedRevenue,
+      avgUnitSell: avgUnitSell ?? null,
       benefitRaw: 0,
       benefitDisplay: 0
     };
@@ -378,6 +418,8 @@ export function aggregateBatchStats(batches, movements, productsMap) {
         productId: batch.productId,
         productName: productsMap[batch.productId]?.name || batch.productId,
         stock_remaining: 0,
+        costEngaged: 0,
+        estimatedRevenue: null,
         margin: 0,
         collected: 0,
         qty_out: 0,
@@ -386,7 +428,16 @@ export function aggregateBatchStats(batches, movements, productsMap) {
     }
 
     byProduct[batch.productId].stock_remaining += qtyRem;
+    byProduct[batch.productId].costEngaged = round2(
+      byProduct[batch.productId].costEngaged + costEngaged
+    );
     byProduct[batch.productId].batch_count += 1;
+    if (estimatedRevenue != null) {
+      const prev = byProduct[batch.productId].estimatedRevenue;
+      byProduct[batch.productId].estimatedRevenue = round2(
+        (prev || 0) + estimatedRevenue
+      );
+    }
   });
 
   movements.forEach(m => {
@@ -413,6 +464,8 @@ export function aggregateBatchStats(batches, movements, productsMap) {
         productId: m.productId,
         productName: productsMap[m.productId]?.name || m.productId,
         stock_remaining: 0,
+        costEngaged: 0,
+        estimatedRevenue: null,
         margin: 0,
         collected: 0,
         qty_out: 0,
@@ -450,6 +503,7 @@ export function aggregateBatchStats(batches, movements, productsMap) {
     totalStockRemaining,
     totalCostConsumed,
     totalCostEngaged,
+    totalEstimatedRevenue,
     benefitRaw,
     benefitDisplay,
     stockValue: totalCostEngaged,
@@ -459,3 +513,151 @@ export function aggregateBatchStats(batches, movements, productsMap) {
     )
   };
 }
+
+/**
+ * Correction sûre d'une vente lot (nouveau mouvement, sans muter l'origine).
+ * Fenêtre : 48 h depuis createdAt du mouvement d'origine.
+ */
+export async function correctBatchSale(
+  {
+    movementId,
+    newAmountCollected,
+    newQuantityOut = null
+  },
+  userId
+) {
+  if (!movementId) throw new Error("Mouvement requis.");
+  if (!userId) throw new Error("Utilisateur requis.");
+
+  const newAmount = parsePositiveNumber(newAmountCollected, { allowZero: true });
+  if (newAmount === null) throw new Error("Nouveau montant invalide.");
+
+  const movementRef = doc(db, BATCH_COLLECTIONS.MOVEMENTS, movementId);
+
+  const result = await runTransaction(db, async (transaction) => {
+    const movementSnap = await transaction.get(movementRef);
+    if (!movementSnap.exists()) {
+      throw new Error("Vente lot introuvable.");
+    }
+
+    const original = movementSnap.data();
+    if (original.reason === "correction") {
+      throw new Error("Impossible de corriger une ligne de correction.");
+    }
+
+    if (!isWithinBatchEditWindow(original.createdAt)) {
+      throw new Error("Délai de 48 h dépassé : correction impossible.");
+    }
+
+    const batchRef = doc(db, BATCH_COLLECTIONS.BATCHES, original.batchId);
+    const batchSnap = await transaction.get(batchRef);
+    if (!batchSnap.exists()) {
+      throw new Error("Lot introuvable.");
+    }
+
+    const batch = batchSnap.data();
+    const costUnit = Number(batch.cost_unit_avg) || 0;
+    const oldQty = Number(original.quantity_out) || 0;
+    const oldAmount = round2(original.amount_collected || 0);
+
+    let qtyAfter = oldQty;
+    if (newQuantityOut != null && newQuantityOut !== "") {
+      const parsedQty = parsePositiveInt(newQuantityOut);
+      if (!parsedQty) throw new Error("Nouvelle quantité invalide.");
+      qtyAfter = parsedQty;
+    }
+
+    const amountDelta = round2(newAmount - oldAmount);
+    const qtyDelta = qtyAfter - oldQty;
+
+    if (amountDelta === 0 && qtyDelta === 0) {
+      throw new Error("Aucune modification détectée.");
+    }
+
+    let remaining = Number(batch.quantity_remaining) || 0;
+    let status = batch.status;
+
+    if (qtyDelta !== 0) {
+      if (batch.status === BATCH_STATUS.CANCELLED) {
+        throw new Error("Ce lot est désactivé.");
+      }
+
+      if (qtyDelta > 0) {
+        if (qtyDelta > remaining) {
+          throw new Error(`Stock insuffisant. Reste : ${remaining}.`);
+        }
+        remaining -= qtyDelta;
+      } else {
+        remaining -= qtyDelta;
+      }
+
+      status =
+        remaining <= 0
+          ? BATCH_STATUS.DEPLETED
+          : BATCH_STATUS.ACTIVE;
+
+      transaction.update(batchRef, {
+        quantity_remaining: remaining,
+        status,
+        updatedAt: Timestamp.now(),
+        updatedBy: userId
+      });
+    }
+
+    const correctionQtyOut = qtyDelta > 0 ? qtyDelta : 0;
+    const costPortionDelta = round2(qtyDelta * costUnit);
+    const profitDelta = round2(amountDelta - costPortionDelta);
+
+    const correctionRef = doc(collection(db, BATCH_COLLECTIONS.MOVEMENTS));
+    transaction.set(correctionRef, {
+      batchId: original.batchId,
+      productId: original.productId,
+      quantity_out: correctionQtyOut,
+      amount_collected: amountDelta,
+      profit_real: profitDelta,
+      reason: "correction",
+      clientName: sanitizeText(original.clientName || "", 80) || "Correction",
+      createdAt: Timestamp.now(),
+      createdBy: userId
+    });
+
+    return {
+      correctionId: correctionRef.id,
+      batchId: original.batchId,
+      productId: original.productId,
+      oldAmount,
+      newAmount,
+      oldQty,
+      qtyAfter,
+      amountDelta,
+      qtyDelta
+    };
+  });
+
+  await writeLog({
+    userId,
+    action: "batch_sale_amount_correction",
+    targetId: movementId,
+    details: {
+      correctionId: result.correctionId,
+      batchId: result.batchId,
+      productId: result.productId,
+      amountBefore: result.oldAmount,
+      amountAfter: result.newAmount,
+      qtyBefore: result.oldQty,
+      qtyAfter: result.qtyAfter,
+      amountDelta: result.amountDelta,
+      qtyDelta: result.qtyDelta,
+      windowMs: BATCH_EDIT_WINDOW_MS
+    }
+  });
+
+  return result;
+}
+
+export function getMovementEffectiveCost(movement, costUnitAvg) {
+  const qty = Number(movement?.quantity_out) || 0;
+  return round2(qty * (Number(costUnitAvg) || 0));
+}
+
+export { isWithinBatchEditWindow, getBatchCreatedAtDate, BATCH_EDIT_WINDOW_MS };

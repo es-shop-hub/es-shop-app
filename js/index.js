@@ -199,6 +199,13 @@ function resetSaleFormUI() {
   cart = [];
   if (clientNameInput) clientNameInput.value = "";
   if (amountPaidInput) amountPaidInput.value = "";
+  if (manualDateCheckbox) {
+    manualDateCheckbox.checked = false;
+  }
+  if (saleDateInput) {
+    saleDateInput.value = "";
+    saleDateInput.disabled = true;
+  }
   setCartMode("choose");
   updateCartUI();
 }

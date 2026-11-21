@@ -23,8 +23,13 @@ import {
 import { bindActionButton } from "./utils/buttonManager.js";
 import {
   BATCH_COLLECTIONS,
-  formatBatchReason
+  formatBatchReason,
+  round2,
+  parsePositiveNumber,
+  parsePositiveInt,
+  isWithinBatchEditWindow
 } from "../batch/js/batch-utils.js";
+import { correctBatchSale } from "../batch/js/batch-service.js";
 
 const $ = id => document.getElementById(id);
 
@@ -35,6 +40,7 @@ const state = {
   saleItems: [],
   batchMovements: [],
   batchProducts: [],
+  batchBatches: [],
   products: [],
   users: [],
   debts: [],
@@ -516,7 +522,7 @@ async function loadData() {
 
     const { start, end } = dateRange;
 
-    const [salesSnap, saleItemsSnap, batchMoveSnap, batchProdSnap] =
+    const [salesSnap, saleItemsSnap, batchMoveSnap, batchProdSnap, batchSnap] =
       await Promise.all([
         getDocs(salesQuery),
         getDocs(saleItemsQuery),
@@ -531,6 +537,10 @@ async function loadData() {
         }),
         getDocs(collection(db, BATCH_COLLECTIONS.PRODUCTS)).catch(err => {
           console.warn("[vendus] batch_products:", err);
+          return { docs: [] };
+        }),
+        getDocs(collection(db, BATCH_COLLECTIONS.BATCHES)).catch(err => {
+          console.warn("[vendus] product_batches:", err);
           return { docs: [] };
         })
       ]);
@@ -547,6 +557,11 @@ async function loadData() {
       .filter(item => saleIds.has(item.saleId));
 
     state.batchProducts = batchProdSnap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
+
+    state.batchBatches = batchSnap.docs.map(d => ({
       id: d.id,
       ...d.data()
     }));
@@ -569,6 +584,7 @@ async function loadData() {
     state.saleItems = [];
     state.batchMovements = [];
     state.batchProducts = [];
+    state.batchBatches = [];
     state.rows = [];
     render();
 
@@ -665,6 +681,7 @@ function buildRows() {
         source: "batch",
         saleId: null,
         movementId: m.id,
+        batchId: m.batchId || null,
         productId: m.productId,
         productName: getBatchProductName(m.productId),
         sellerId: m.createdBy || "",
@@ -813,7 +830,10 @@ function createSaleCard(row, showClientEdit = false) {
   badge.className = "badge";
 
   if (isBatch) {
-    if (row.reason === "loss" || row.reason === "perte") {
+    if (row.reason === "correction") {
+      badge.classList.add("badge-partial");
+      badge.textContent = "Correction";
+    } else if (row.reason === "loss" || row.reason === "perte") {
       badge.classList.add("badge-loss");
       badge.textContent = "Perte";
     } else {
@@ -845,19 +865,42 @@ function createSaleCard(row, showClientEdit = false) {
     row.saleStatus !== "cancelled" &&
     row.saleId;
 
-  if (canActOnSale) {
+  const canCorrectBatch =
+    isBatch &&
+    row.movementId &&
+    row.reason !== "correction" &&
+    isWithinBatchEditWindow(row.createdAt) &&
+    currentUser &&
+    (currentUser.role === "admin" || currentUser.role === "seller");
+
+  if (canActOnSale || canCorrectBatch) {
     const actions = document.createElement("div");
     actions.className = "sale-card-actions";
 
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn-edit-client";
-    editBtn.id = `editClient_${row.saleId}`;
-    editBtn.textContent = "Modifier client";
-    bindActionButton(editBtn, async () => {
-      await editSaleClientName(row.saleId, row.clientName);
-    });
-    actions.appendChild(editBtn);
+    if (canActOnSale) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-edit-client";
+      editBtn.id = `editClient_${row.saleId}`;
+      editBtn.textContent = "Modifier client";
+      bindActionButton(editBtn, async () => {
+        await editSaleClientName(row.saleId, row.clientName);
+      });
+      actions.appendChild(editBtn);
+    }
+
+    if (canCorrectBatch) {
+      const correctBtn = document.createElement("button");
+      correctBtn.type = "button";
+      correctBtn.className = "btn-edit-client";
+      correctBtn.id = `correctBatch_${row.movementId}`;
+      correctBtn.textContent = "Corriger montant";
+      bindActionButton(correctBtn, async () => {
+        await requestCorrectBatchSale(row);
+      });
+      actions.appendChild(correctBtn);
+    }
+
     card.appendChild(actions);
   }
 
@@ -1047,6 +1090,74 @@ async function cancelSale(saleId) {
   } catch (err) {
     console.error("[vendus] cancelSale", err);
     alert(err?.message || "Impossible d'annuler la vente.");
+  }
+}
+
+async function requestCorrectBatchSale(row) {
+  if (!row?.movementId) return;
+  if (!isWithinBatchEditWindow(row.createdAt)) {
+    alert("Délai de 48 h dépassé : correction impossible.");
+    return;
+  }
+
+  const amountRaw = window.prompt(
+    "Nouveau montant encaissé :",
+    String(row.total ?? "")
+  );
+  if (amountRaw == null) return;
+
+  const newAmount = parsePositiveNumber(amountRaw, { allowZero: true });
+  if (newAmount === null) {
+    alert("Montant invalide.");
+    return;
+  }
+
+  const qtyRaw = window.prompt(
+    "Nouvelle quantité (laisser vide pour ne pas changer) :",
+    String(row.quantity ?? "")
+  );
+  if (qtyRaw == null) return;
+
+  let newQuantityOut = null;
+  const trimmedQty = String(qtyRaw).trim();
+  if (trimmedQty !== "" && trimmedQty !== String(row.quantity)) {
+    newQuantityOut = parsePositiveInt(trimmedQty);
+    if (!newQuantityOut) {
+      alert("Quantité invalide.");
+      return;
+    }
+  }
+
+  const qtyForCost = newQuantityOut != null ? newQuantityOut : Number(row.quantity) || 0;
+  const batch = state.batchBatches.find(b => b.id === row.batchId);
+  const costPortion = round2(qtyForCost * (Number(batch?.cost_unit_avg) || 0));
+
+  if (newAmount < costPortion) {
+    const ok = window.confirm(
+      `Attention : le montant (${formatMoney(newAmount)}) est inférieur au coût d'achat (${formatMoney(costPortion)}).\n\nContinuer quand même ?`
+    );
+    if (!ok) return;
+  }
+
+  const confirmEdit = window.confirm(
+    "Confirmer la correction de cette vente lot ? (un mouvement de correction sera ajouté)"
+  );
+  if (!confirmEdit) return;
+
+  try {
+    await correctBatchSale(
+      {
+        movementId: row.movementId,
+        newAmountCollected: newAmount,
+        newQuantityOut
+      },
+      currentUser?.id || currentUser?.userId || auth.currentUser?.uid
+    );
+    alert("Correction enregistrée.");
+    await loadData();
+  } catch (err) {
+    console.error("[vendus] correctBatchSale", err);
+    alert(err.message || "Impossible de corriger la vente lot.");
   }
 }
 

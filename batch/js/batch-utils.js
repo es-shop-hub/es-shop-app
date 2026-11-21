@@ -60,6 +60,21 @@ export function formatDate(ts) {
   });
 }
 
+export const BATCH_EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+export function getBatchCreatedAtDate(createdAt) {
+  if (!createdAt) return null;
+  if (typeof createdAt.toDate === "function") return createdAt.toDate();
+  const date = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function isWithinBatchEditWindow(createdAt, now = Date.now()) {
+  const date = getBatchCreatedAtDate(createdAt);
+  if (!date) return false;
+  return now - date.getTime() < BATCH_EDIT_WINDOW_MS;
+}
+
 /** Labels FR pour batch_movements.reason */
 export function formatBatchReason(reason) {
   const key = String(reason || "sale").toLowerCase();
@@ -68,7 +83,8 @@ export function formatBatchReason(reason) {
     sample: "Échantillon",
     promo: "Promotion",
     loss: "Perte",
-    perte: "Perte"
+    perte: "Perte",
+    correction: "Correction"
   };
   return map[key] || String(reason || "Vente");
 }

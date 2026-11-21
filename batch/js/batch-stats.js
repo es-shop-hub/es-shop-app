@@ -204,6 +204,10 @@ function renderKpis(stats) {
   if (els.kpiStock) els.kpiStock.textContent = String(stats.totalStockRemaining);
 }
 
+function renderMoneyOrDash(value) {
+  return value == null ? "—" : formatMoney(value);
+}
+
 function renderProductTable(rows) {
   if (!els.productTableBody) return;
   els.productTableBody.replaceChildren();
@@ -222,21 +226,34 @@ function renderProductTable(rows) {
   rows.forEach(row => {
     const tr = document.createElement("tr");
 
-    const cells = [
-      row.productName,
-      String(row.batch_count),
-      String(row.stock_remaining),
-      String(row.qty_out),
-      formatMoney(row.margin)
-    ];
+    const nameTd = document.createElement("td");
+    nameTd.textContent = row.productName;
 
-    cells.forEach((text, i) => {
-      const td = document.createElement("td");
-      td.textContent = text;
-      if (i >= 2) td.className = "num";
-      tr.appendChild(td);
-    });
+    const lotsTd = document.createElement("td");
+    lotsTd.className = "num";
+    lotsTd.textContent = String(row.batch_count);
 
+    const stockTd = document.createElement("td");
+    stockTd.className = "num";
+    const stockMain = document.createElement("div");
+    stockMain.textContent = String(row.stock_remaining);
+    const stockBuy = document.createElement("small");
+    stockBuy.className = "cell-sub";
+    stockBuy.textContent = `Achat restant : ${renderMoneyOrDash(row.costEngaged)}`;
+    const stockEst = document.createElement("small");
+    stockEst.className = "cell-sub";
+    stockEst.textContent = `Estim. encaissement : ${renderMoneyOrDash(row.estimatedRevenue)}`;
+    stockTd.append(stockMain, stockBuy, stockEst);
+
+    const qtyTd = document.createElement("td");
+    qtyTd.className = "num";
+    qtyTd.textContent = String(row.qty_out);
+
+    const marginTd = document.createElement("td");
+    marginTd.className = "num";
+    marginTd.textContent = formatMoney(row.margin);
+
+    tr.append(nameTd, lotsTd, stockTd, qtyTd, marginTd);
     els.productTableBody.appendChild(tr);
   });
 }
@@ -276,7 +293,13 @@ function renderBatchTable(rows) {
     const stockSub = document.createElement("small");
     stockSub.className = "cell-sub";
     stockSub.textContent = `Initial : ${row.quantity_initial}`;
-    stockTd.append(stockMain, stockSub);
+    const stockBuy = document.createElement("small");
+    stockBuy.className = "cell-sub";
+    stockBuy.textContent = `Achat restant : ${renderMoneyOrDash(row.costEngaged)}`;
+    const stockEst = document.createElement("small");
+    stockEst.className = "cell-sub";
+    stockEst.textContent = `Estim. encaissement : ${renderMoneyOrDash(row.estimatedRevenue)}`;
+    stockTd.append(stockMain, stockSub, stockBuy, stockEst);
 
     const qtyTd = document.createElement("td");
     qtyTd.className = "num";

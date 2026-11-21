@@ -6,11 +6,13 @@ import {
   toggleBatchProductActive,
   deleteBatchProduct,
   loadBatches,
+  loadBatchMovements,
   createBatch,
   updateBatch,
   cancelBatch,
   deleteBatch,
-  recordBatchSale
+  recordBatchSale,
+  aggregateBatchStats
 } from "./batch-service.js";
 import {
   showToast,
@@ -19,7 +21,10 @@ import {
   closeModal,
   formatMoney,
   formatDate,
-  statusBadge
+  statusBadge,
+  round2,
+  parsePositiveInt,
+  parsePositiveNumber
 } from "./batch-utils.js";
 import { bindActionButton } from "../../js/utils/buttonManager.js";
 import { upsertClientByName } from "../../js/clients-service.js";
@@ -28,6 +33,7 @@ const auth = getAuth();
 let currentUserId = null;
 let products = [];
 let batches = [];
+let batchStatsById = {};
 let productsMap = {};
 let editingProductId = null;
 let editingBatchId = null;
@@ -258,7 +264,21 @@ function renderSaleBatchPickerList() {
 
     const sub = document.createElement("span");
     sub.className = "picker-item-sub";
-    sub.textContent = `Reste ${batch.quantity_remaining} • coût/u ${formatMoney(batch.cost_unit_avg)}`;
+    const stats = batchStatsById[batch.id] || {};
+    const buyTxt =
+      stats.costEngaged != null
+        ? formatMoney(stats.costEngaged)
+        : formatMoney(
+            round2(
+              (Number(batch.quantity_remaining) || 0) *
+                (Number(batch.cost_unit_avg) || 0)
+            )
+          );
+    const estTxt =
+      stats.estimatedRevenue == null ? "—" : formatMoney(stats.estimatedRevenue);
+    sub.textContent =
+      `Reste ${batch.quantity_remaining} • coût/u ${formatMoney(batch.cost_unit_avg)}` +
+      ` • Achat restant ${buyTxt} • Estim. ${estTxt}`;
     btn.appendChild(sub);
 
     btn.addEventListener("click", () => {
@@ -417,9 +437,24 @@ function renderBatches() {
     badge.textContent = badgeInfo.label;
     title.appendChild(badge);
 
+    const stats = batchStatsById[batch.id] || {};
+    const buyRemaining =
+      stats.costEngaged != null
+        ? formatMoney(stats.costEngaged)
+        : formatMoney(
+            round2(
+              (Number(batch.quantity_remaining) || 0) *
+                (Number(batch.cost_unit_avg) || 0)
+            )
+          );
+    const estRevenue =
+      stats.estimatedRevenue == null ? "—" : formatMoney(stats.estimatedRevenue);
+
     const sub = document.createElement("small");
     sub.textContent = [
       `Stock : ${batch.quantity_remaining}/${batch.quantity_initial}`,
+      `Achat restant : ${buyRemaining}`,
+      `Estim. encaissement : ${estRevenue}`,
       `Coût total : ${formatMoney(batch.cost_total)}`,
       `Coût/u : ${formatMoney(batch.cost_unit_avg)}`,
       `Créé : ${formatDate(batch.createdAt)}`
@@ -465,7 +500,13 @@ async function refreshAll() {
   try {
     products = await loadBatchProducts();
     batches = await loadBatches();
+    const movements = await loadBatchMovements();
     rebuildProductsMap();
+    const stats = aggregateBatchStats(batches, movements, productsMap);
+    batchStatsById = {};
+    (stats.byBatch || []).forEach(row => {
+      batchStatsById[row.batchId] = row;
+    });
     renderProducts();
     renderBatches();
     refreshPickers();
@@ -663,11 +704,28 @@ async function handleRecordSale() {
     if (!clientName) {
       throw new Error("Nom client requis.");
     }
+
+    const qtyOut = parsePositiveInt(els.saleQty?.value);
+    const amount = parsePositiveNumber(els.saleAmount?.value, { allowZero: true });
+    if (!qtyOut) throw new Error("Quantité vendue invalide.");
+    if (amount === null) throw new Error("Montant encaissé invalide.");
+
+    const batch = batches.find(b => b.id === selectedSaleBatchId);
+    const costPortion = round2(
+      qtyOut * (Number(batch?.cost_unit_avg) || 0)
+    );
+    if (amount < costPortion) {
+      const ok = window.confirm(
+        `Attention : le montant (${formatMoney(amount)}) est inférieur au coût d'achat (${formatMoney(costPortion)}).\n\nContinuer quand même ?`
+      );
+      if (!ok) return;
+    }
+
     await recordBatchSale(
       {
         batchId: selectedSaleBatchId,
-        quantityOut: els.saleQty?.value,
-        amountCollected: els.saleAmount?.value,
+        quantityOut: qtyOut,
+        amountCollected: amount,
         reason: els.saleReason?.value || "sale",
         clientName
       },
