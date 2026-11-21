@@ -34,6 +34,9 @@ const auth = getAuth();
 const signupForm = document.getElementById("signupForm");
 const googleSignupBtn = document.getElementById("googleSignupBtn");
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
+googleProvider.addScope("email");
+googleProvider.addScope("profile");
 
 initPasswordToggles();
 

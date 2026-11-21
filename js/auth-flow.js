@@ -170,11 +170,24 @@ export function authErrorMessage(err, fallback = "Erreur") {
   if (code === "auth/network-request-failed") return "Pas de connexion internet";
   if (code === "auth/too-many-requests") return "Trop de tentatives. Réessayez plus tard";
   if (code === "auth/popup-closed-by-user") return "Connexion Google annulée";
-  if (code === "auth/popup-blocked") return "Popup bloquée par le navigateur";
+  if (code === "auth/popup-blocked") return "Popup bloquée par le navigateur. Autorisez les popups pour ce site.";
   if (code === "auth/cancelled-popup-request") return "Connexion Google annulée";
+  if (code === "auth/unauthorized-domain") {
+    return "Domaine non autorisé Firebase. Ajoutez ce domaine dans Authentication → Settings → Authorized domains.";
+  }
+  if (code === "auth/operation-not-allowed") {
+    return "Connexion Google désactivée. Activez le fournisseur Google dans Firebase Authentication.";
+  }
+  if (code === "auth/account-exists-with-different-credential") {
+    return "Un compte existe déjà avec cet email (autre méthode de connexion).";
+  }
+  if (code === "auth/internal-error") {
+    return "Erreur interne Google/Firebase (souvent popup ou cookies tiers). Réessayez ou autorisez les cookies.";
+  }
   if (code === "permission-denied") return "Accès refusé. Vérifiez les règles Firestore.";
   if (code === "meta_missing") return "Configuration system/meta manquante.";
   if (code === "user_limit") return `Limite atteinte : ${MAX_USERS} utilisateurs maximum.`;
 
+  if (code) return `${fallback} (${code})`;
   return fallback;
 }

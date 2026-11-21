@@ -27,6 +27,9 @@ import { bindFormAction, bindActionButton } from "./utils/buttonManager.js";
 
 const auth = getAuth();
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
+googleProvider.addScope("email");
+googleProvider.addScope("profile");
 
 const loginForm = document.getElementById("loginForm");
 const emailInput = document.getElementById("email");
